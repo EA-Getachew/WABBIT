@@ -1528,7 +1528,7 @@ subroutine draw_wing_polygon(xx0, ddx, mask, mask_color, us, Insect, color_wing,
     real(kind=rk), allocatable, save :: tmp_dist_xy(:,:,:)
     logical, allocatable, save       :: tmp_active(:,:,:)
     real(kind=rk) :: d_seg, zmin_wing, zmax_wing
-    real(kind=rk) :: phi_xy, phi_z, phi, mask_value
+    real(kind=rk) :: phi_xy, phi_z, phi, mask_value, v_tmp(1:3)
     logical :: inside_polygon
 
 
@@ -1841,13 +1841,19 @@ subroutine draw_wing_polygon(xx0, ddx, mask, mask_color, us, Insect, color_wing,
                 ! call step and update mask, us
                 !----------------------------------------------------------
 
-                mask_color(ix,iy,iz) = color_wing
+                ! mask_color(ix,iy,iz) = color_wing
                 mask_value = step(phi, 0.0_rk, Insect%smooth, Insect%safety,  Insect%smoothing_type_int)
 
                 ! update only if the new mask value is higher than the one before
-                if (mask_value > mask(ix,iy,iz)) then
+                if ((mask_value > mask(ix,iy,iz)) .and. (mask_value>0.0_rk)) then
                     mask(ix,iy,iz) = mask_value
                     mask_color(ix,iy,iz) = color_wing
+
+                    v_tmp(1) = rot_rel_wing_w(2)*x_w(3)-rot_rel_wing_w(3)*x_w(2)
+                    v_tmp(2) = rot_rel_wing_w(3)*x_w(1)-rot_rel_wing_w(1)*x_w(3)
+                    v_tmp(3) = rot_rel_wing_w(1)*x_w(2)-rot_rel_wing_w(2)*x_w(1)
+
+                    us(ix,iy,iz,1:3) = matmul(transpose(M_b2w), v_tmp)
                 endif
 
             enddo
