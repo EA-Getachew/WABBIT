@@ -281,8 +281,8 @@ module module_insects
       character(len=clong) :: BodyType="", BodyMotion=""
       character(len=clong) :: FlappingMotion_right="", FlappingMotion_left=""
       character(len=clong) :: FlappingMotion_right2="", FlappingMotion_left2=""
-      character(len=clong) :: infile="", LeftWing="", RightWing=""
-      character(len=clong) :: infile2="", LeftWing2="", RightWing2=""
+      character(len=clong) :: LeftWing="", RightWing=""
+      character(len=clong) :: LeftWing2="", RightWing2=""
       ! parameters for body:
       real(kind=rk) :: L_body=0.0_rk, b_body=0.0_rk, R_head=0.0_rk, R_eye=0.0_rk
       ! parameters for wing shape:

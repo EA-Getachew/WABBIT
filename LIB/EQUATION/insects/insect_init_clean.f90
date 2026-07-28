@@ -157,36 +157,47 @@ subroutine insect_init(time, fname_ini, Insect_ID, resume_backup, fname_backup, 
     endif
 
     ! read data for the first pair of wings
-    call read_param_mpi(PARAMS,insect_name_str,"WingShape",Insects(Insect_ID)%WingShape(1),"none")
-    Insects(Insect_ID)%WingShape(2) = Insects(Insect_ID)%WingShape(1)
-    ! The following two lines take effect if WingShapeL or WingShapeR are set
-    call read_param_mpi(PARAMS,insect_name_str,"WingShapeL",Insects(Insect_ID)%WingShape(1),Insects(Insect_ID)%WingShape(1))
-    call read_param_mpi(PARAMS,insect_name_str,"WingShapeR",Insects(Insect_ID)%WingShape(2),Insects(Insect_ID)%WingShape(2))
+    call read_param_mpi(PARAMS,insect_name_str,"WingShape", dummystr, "UNKNOWN")
+    if (dummystr /= "UNKNOWN") then
+        call abort(2307261,"Insect-module: the INI-parameter __WingShape__ is deprecated and was removed. Please set&
+        & individual shapes in the Insects section of your INI file (WingShapeR, WingShapeL, WingShapeR2, WingShapeL2).&
+        & Even if all wings are the same, we require a shape for each one.")
+    endif
+    ! Read wing shapes
+    call read_param_mpi(PARAMS,insect_name_str,"WingShapeL",Insects(Insect_ID)%WingShape(1), 'UNKNOWN-NOT-SET')
+    call read_param_mpi(PARAMS,insect_name_str,"WingShapeR",Insects(Insect_ID)%WingShape(2), 'UNKNOWN-NOT-SET')
     ! Rectangular wing parameters
     call read_param_mpi(PARAMS,insect_name_str,"b_top",Insects(Insect_ID)%b_top, 0.0_rk)
     call read_param_mpi(PARAMS,insect_name_str,"b_bot",Insects(Insect_ID)%b_bot, 0.0_rk)
     ! Kinematics
-    call read_param_mpi(PARAMS,insect_name_str,"FlappingMotion_right",Insects(Insect_ID)%FlappingMotion_right,"none")
-    call read_param_mpi(PARAMS,insect_name_str,"FlappingMotion_left",Insects(Insect_ID)%FlappingMotion_left,"none")
-    ! this file is used in old syntax form for both wings:
-    call read_param_mpi(PARAMS,insect_name_str,"infile",Insects(Insect_ID)%infile,"none.in")
+    call read_param_mpi(PARAMS,insect_name_str,"FlappingMotion_right",Insects(Insect_ID)%FlappingMotion_right,"UNKNOWN-NOT-SET")
+    call read_param_mpi(PARAMS,insect_name_str,"FlappingMotion_left",Insects(Insect_ID)%FlappingMotion_left,"UNKNOWN-NOT-SET")
+
 
     if ( index(Insects(Insect_ID)%FlappingMotion_right,"from_file::") /= 0 ) then
         ! new syntax, uses fourier/hermite periodic kinematics read from *.ini file
         Insects(Insect_ID)%kine_wing_r%infile = Insects(Insect_ID)%FlappingMotion_right( 12:clong  )
-        Insects(Insect_ID)%FlappingMotion_right = "from_file"        
+        Insects(Insect_ID)%FlappingMotion_right = "from_file"      
+
     elseif ( Insects(Insect_ID)%FlappingMotion_right == "from_file" ) then
         ! old syntax, implies symmetric periodic motion, read from *.ini file
-        Insects(Insect_ID)%kine_wing_r%infile = Insects(Insect_ID)%infile
+        call abort(2307263,"Insect-module: the INI-parameter __infile__ is deprecated and was removed. It was used&
+        & for symmetric wing motion, in combination with FlappingMotion_right=from_file.&
+        & This possibility has been removed, and you need to set FlappingMotion_right=from_file::XXX.ini for all&
+        & wings in the simulation, even if they have the same flapping motion. Note difference from_file vs from_file::")
     endif
 
     if ( index(Insects(Insect_ID)%FlappingMotion_left,"from_file::") /= 0 ) then
         ! new syntax, uses fourier/hermite periodic kinematics read from *.ini file
         Insects(Insect_ID)%kine_wing_l%infile = Insects(Insect_ID)%FlappingMotion_left( 12:clong  )
         Insects(Insect_ID)%FlappingMotion_left = "from_file"
+
     elseif ( Insects(Insect_ID)%FlappingMotion_left == "from_file" ) then
         ! old syntax, implies symmetric periodic motion, read from *.ini file
-        Insects(Insect_ID)%kine_wing_l%infile = Insects(Insect_ID)%infile
+        call abort(2307264,"Insect-module: the INI-parameter __infile__ is deprecated and was removed. It was used&
+        & for symmetric wing motion, in combination with FlappingMotion_left=from_file.&
+        & This possibility has been removed, and you need to set FlappingMotion_right=from_file::XXX.ini for all&
+        & wings in the simulation, even if they have the same flapping motion. Note difference from_file vs from_file::")
     endif
 
     if (root) then
@@ -203,35 +214,26 @@ subroutine insect_init(time, fname_ini, Insect_ID, resume_backup, fname_backup, 
 
     ! read data for the second pair of wings
     if (Insects(Insect_ID)%second_wing_pair) then
-        ! note that only Fourier wing shape can be different from first wings
-        call read_param_mpi(PARAMS,insect_name_str,"WingShape2",Insects(Insect_ID)%WingShape(3),"none")
-        Insects(Insect_ID)%WingShape(4) = Insects(Insect_ID)%WingShape(3)
-        ! The following two lines take effect if WingShape2L or WingShape2R are set
-        call read_param_mpi(PARAMS,insect_name_str,"WingShape2L",Insects(Insect_ID)%WingShape(3),Insects(Insect_ID)%WingShape(3))
-        call read_param_mpi(PARAMS,insect_name_str,"WingShape2R",Insects(Insect_ID)%WingShape(4),Insects(Insect_ID)%WingShape(4))
+        ! Read wing shapes for second wing pair (usually hindwings or elytra)
+        call read_param_mpi(PARAMS,insect_name_str,"WingShape2L",Insects(Insect_ID)%WingShape(3),"UNKNOWN-NOT-SET")
+        call read_param_mpi(PARAMS,insect_name_str,"WingShape2R",Insects(Insect_ID)%WingShape(4),"UNKNOWN-NOT-SET")
+
         ! Kinematics
-        call read_param_mpi(PARAMS,insect_name_str,"FlappingMotion_right2",Insects(Insect_ID)%FlappingMotion_right2,"none")
-        call read_param_mpi(PARAMS,insect_name_str,"FlappingMotion_left2",Insects(Insect_ID)%FlappingMotion_left2,"none")
-        ! this file is used in old syntax form for both wings:
-        call read_param_mpi(PARAMS,insect_name_str,"infile2",Insects(Insect_ID)%infile2,"none.in")
+        call read_param_mpi(PARAMS,insect_name_str,"FlappingMotion_right2",Insects(Insect_ID)%FlappingMotion_right2,"UNKNOWN-NOT-SET")
+        call read_param_mpi(PARAMS,insect_name_str,"FlappingMotion_left2",Insects(Insect_ID)%FlappingMotion_left2,"UNKNOWN-NOT-SET")
 
         if ( index(Insects(Insect_ID)%FlappingMotion_right2,"from_file::") /= 0 ) then
             ! new syntax, uses fourier/hermite periodic kinematics read from *.ini file
             Insects(Insect_ID)%kine_wing_r2%infile = Insects(Insect_ID)%FlappingMotion_right2( 12:clong  )
             Insects(Insect_ID)%FlappingMotion_right2 = "from_file"
 
-        elseif ( index(Insects(Insect_ID)%FlappingMotion_right2,"kinematics_loader::") /= 0 ) then
-            ! new syntax, uses the kinematics loader for non-periodic kinematics
-            Insects(Insect_ID)%kine_wing_r2%infile = Insects(Insect_ID)%FlappingMotion_right2( 20:clong )
-            Insects(Insect_ID)%FlappingMotion_right2 = "kinematics_loader"
-
         elseif ( Insects(Insect_ID)%FlappingMotion_right2 == "from_file" ) then
-            ! old syntax, implies symmetric periodic motion, read from *.ini file
-            Insects(Insect_ID)%kine_wing_r2%infile = Insects(Insect_ID)%infile2
+            ! old syntax removed. Use insect_migration_assistent.py to convert old INI file
+            call abort(2307266,"Insect-module: the INI-parameter __infile__ is deprecated and was removed. It was used&
+            & for symmetric wing motion, in combination with FlappingMotion_left2=from_file.&
+            & This possibility has been removed, and you need to set FlappingMotion_right=from_file::XXX.ini for all&
+            & wings in the simulation, even if they have the same flapping motion. Note difference from_file vs from_file::")
 
-        elseif ( Insects(Insect_ID)%FlappingMotion_right2 == "kinematics_loader" ) then
-            ! old syntax, implies symmetric non-periodic motion, read from *.dat file
-            Insects(Insect_ID)%kine_wing_r2%infile = Insects(Insect_ID)%infile2
         endif
 
         if ( index(Insects(Insect_ID)%FlappingMotion_left2,"from_file::") /= 0 ) then
@@ -239,18 +241,13 @@ subroutine insect_init(time, fname_ini, Insect_ID, resume_backup, fname_backup, 
             Insects(Insect_ID)%kine_wing_l2%infile = Insects(Insect_ID)%FlappingMotion_left2( 12:clong  )
             Insects(Insect_ID)%FlappingMotion_left2 = "from_file"
 
-        elseif ( index(Insects(Insect_ID)%FlappingMotion_left2,"kinematics_loader::") /= 0 ) then
-            ! new syntax, uses the kinematics loader for non-periodic kinematics
-            Insects(Insect_ID)%kine_wing_l2%infile = Insects(Insect_ID)%FlappingMotion_left2( 20:clong )
-            Insects(Insect_ID)%FlappingMotion_left2 = "kinematics_loader"
-
         elseif ( Insects(Insect_ID)%FlappingMotion_left2 == "from_file" ) then
-            ! old syntax, implies symmetric periodic motion, read from *.ini file
-            Insects(Insect_ID)%kine_wing_l2%infile = Insects(Insect_ID)%infile2
+            ! old syntax removed. Use insect_migration_assistent.py to convert old INI file
+            call abort(2307268,"Insect-module: the INI-parameter __infile__ is deprecated and was removed. It was used&
+            & for symmetric wing motion, in combination with FlappingMotion_left2=from_file.&
+            & This possibility has been removed, and you need to set FlappingMotion_right=from_file::XXX.ini for all&
+            & wings in the simulation, even if they have the same flapping motion. Note difference from_file vs from_file::")
 
-        elseif ( Insects(Insect_ID)%FlappingMotion_left2 == "kinematics_loader" ) then
-            ! old syntax, implies symmetric non-periodic motion, read from *.dat file
-            Insects(Insect_ID)%kine_wing_l2%infile = Insects(Insect_ID)%infile2
         endif
 
         if (root) then
