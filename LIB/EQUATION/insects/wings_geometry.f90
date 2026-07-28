@@ -1845,7 +1845,7 @@ subroutine draw_wing_polygon(xx0, ddx, mask, mask_color, us, Insect, color_wing,
                 mask_value = step(phi, 0.0_rk, Insect%smooth, Insect%safety,  Insect%smoothing_type_int)
 
                 ! update only if the new mask value is higher than the one before
-                if (mask_value > mask(ix,iy,iz)) then
+                if ((mask_value > mask(ix,iy,iz)) .and. (mask_value>0.0_rk)) then
                     mask(ix,iy,iz) = mask_value
                     mask_color(ix,iy,iz) = color_wing
 
