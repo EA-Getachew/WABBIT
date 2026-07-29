@@ -48,7 +48,7 @@ subroutine draw_insect_wings(time, xx0, ddx, mask, mask_color, us, Insect, delet
   endif
 
   ! sometimes we have the geometry type insect but it has no wings (for example for fractal_tree), we then want to skip the rest
-  if (.not. (Insect%RightWing=="yes" .or. Insect%LeftWing=="yes" .or. Insect%RightWing2=="yes" .or. Insect%LeftWing2=="yes")) return
+  if (.not. any(Insect%wings_used)) return
 
   if ((dabs(Insect%time-time)>1.0d-10) .and. root) then
     write(*,'("error! time=",es15.8," but Insect%time=",es15.8)') time, Insect%time
@@ -76,22 +76,22 @@ subroutine draw_insect_wings(time, xx0, ddx, mask, mask_color, us, Insect, delet
   ! Stage I: mask + us field in BODY system
   !-- wing id number: 1 = left, 2 = right, 3 = 2nd left, 4 = 2nd right
   !-----------------------------------------------------------------------------
-  if (Insect%RightWing == "yes") then
+  if (Insect%RightWing) then
     call draw_wing(xx0, ddx, mask, mask_color, us, Insect, Insect%color_r, 2_2, &
     Insect%M_g2b, Insect%M_b2w_r, Insect%x_pivot_r_b, Insect%rot_rel_wing_r_w, "R" )
   endif
 
-  if (Insect%LeftWing == "yes") then
+  if (Insect%LeftWing) then
     call draw_wing(xx0, ddx, mask, mask_color, us, Insect, Insect%color_l, 1_2, &
     Insect%M_g2b, Insect%M_b2w_l, Insect%x_pivot_l_b, Insect%rot_rel_wing_l_w, "L" )
   endif
 
-  if (Insect%RightWing2 == "yes") then
+  if (Insect%RightWing2) then
     call draw_wing(xx0, ddx, mask, mask_color, us, Insect, Insect%color_r2, 4_2, &
     Insect%M_g2b, Insect%M_b2w_r2, Insect%x_pivot_r2_b, Insect%rot_rel_wing_r2_w, "R" )
   endif
 
-  if (Insect%LeftWing2 == "yes") then
+  if (Insect%LeftWing2) then
     call draw_wing(xx0, ddx, mask, mask_color, us, Insect, Insect%color_l2, 3_2, &
     Insect%M_g2b, Insect%M_b2w_l2, Insect%x_pivot_l2_b, Insect%rot_rel_wing_l2_w, "L" )
   endif

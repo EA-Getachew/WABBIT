@@ -119,6 +119,7 @@ module module_insects
       logical :: body_already_drawn = .false.
       ! second wing pair exists or not
       logical :: second_wing_pair
+      
 
       !-------------------------------------------------------------
       ! for kinematics loader 
@@ -281,8 +282,11 @@ module module_insects
       character(len=clong) :: BodyType="", BodyMotion=""
       character(len=clong) :: FlappingMotion_right="", FlappingMotion_left=""
       character(len=clong) :: FlappingMotion_right2="", FlappingMotion_left2=""
-      character(len=clong) :: LeftWing="", RightWing=""
-      character(len=clong) :: LeftWing2="", RightWing2=""
+      logical :: LeftWing=.true., RightWing=.true.
+      logical :: LeftWing2=.false., RightWing2=.false.
+      ! for some parts of the code, it is good to have this array:
+      ! wing id number: 1 = left, 2 = right, 3 = 2nd left, 4 = 2nd right
+      logical :: wings_used(1:4) = .false.
       ! parameters for body:
       real(kind=rk) :: L_body=0.0_rk, b_body=0.0_rk, R_head=0.0_rk, R_eye=0.0_rk
       ! parameters for wing shape:
