@@ -66,18 +66,6 @@ subroutine create_mask_3D_nspp( time, x0, dx, Bs, g, mask, stage )
                 call draw_free_sphere(x0, dx, Bs, g, mask, insect_id, i_geom=i_geom)
             endif
 
-        case ('active-grid')
-            !-----------------------------------------------------------------------
-            ! ACTIVE GRID
-            !-----------------------------------------------------------------------
-            if (stage == "time-dependent-part" .or. stage == "all-parts") then
-                ! active grids are always time-dependent
-                call get_insect_id(i_geom, insect_id)  ! retrieve the id of the insect
-                call draw_active_grid_winglets(time, insect_id, x0-dble(g)*dx, dx, &
-                mask(:,:,:,1), mask(:,:,:,5), mask(:,:,:,2:4))
-            endif
-
-
         case ('insect')
             !-----------------------------------------------------------------------
             ! INSECT MODULE

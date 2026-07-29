@@ -289,6 +289,7 @@ contains
     ! if not, we read in an array of geometries and can sert in several geometry files or strings
     call read_param_mpi(FILE, 'VPM', 'geometry', params_acm%geometry_legacy, "")
     if (params_acm%geometry_legacy /= "") then
+        ! we have found the keyword "geometry"
         params_acm%n_geometries = 1
         allocate(params_acm%geometries(1))
         allocate(params_acm%geometry_files(1))
@@ -540,7 +541,7 @@ contains
         ! if used, setup insect. Note active grid is part of the insects: they require the same init module
         !
         ! NOTE: there are several testing geometries used to test the free-flight solver: cylinder-free, sphere-free and plate-free (2D)
-        if (strings_are_similar(params_acm%geometries(i), "insect") .or. strings_are_similar(params_acm%geometries(i), "active_grid") .or. &
+        if (strings_are_similar(params_acm%geometries(i), "insect") .or. &
             strings_are_similar(params_acm%geometries(i), "cylinder-free") .or. strings_are_similar(params_acm%geometries(i), "sphere-free") .or. &
             strings_are_similar(params_acm%geometries(i), "plate-free")) then
             ! when computing passive scalars, we require derivatives of the mask function, which

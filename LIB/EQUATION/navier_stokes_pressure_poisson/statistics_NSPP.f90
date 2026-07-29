@@ -89,7 +89,7 @@ subroutine STATISTICS_NSPP( time, dt, u, g, x0, dx, stage, work, mask )
 
     ! save some computing time by using a logical and not comparing every time
     is_insect = .false.
-    if (any(params_nspp%geometries(:) == "Insect").or.any(params_nspp%geometries(:)=="active_grid") &
+    if (any(params_nspp%geometries(:) == "Insect") &
         .or. any(params_nspp%geometries(:)=="cylinder-free").or.any(params_nspp%geometries(:)=="sphere-free").or.any(params_nspp%geometries(:)=="plate-free")) is_insect = .true.
 
     has_two_wings = .false.

@@ -14,12 +14,12 @@ module module_insects
 
    ! functions
    PUBLIC :: Draw_Insect, draw_insect_body, draw_insect_wings, insect_geometry_indicator, Update_All_Insects, insects_array_init, insect_init, &
-      insects_clean, insect_clean, draw_active_grid_winglets, init_insect_data, write_insect_data, &
+      insects_clean, insect_clean, init_insect_data, write_insect_data, &
       aero_power, inert_power, read_insect_STATE_from_file, rigid_solid_init, rigid_solid_rhs, &
       BodyMotion, FlappingMotionWrap, StrokePlane, mask_from_pointcloud, &
       body_rotation_matrix, wing_rotation_matrix
    ! type definitions
-   PUBLIC :: wingkinematics, diptera
+   PUBLIC :: wingkinematics_type, diptera
 
    ! we use this so only root prints write statements...
    logical :: root = .false.
@@ -48,16 +48,15 @@ module module_insects
    ! TYPE DEFINITIONS
    ! datatype for wing kinematics, if described by a Fourier series or kineloader
    ! For both wings such a datatype is contained in the insect.
-   type wingkinematics
+   type wingkinematics_type
       ! Fourier coefficients
       real(kind=rk) :: a0_alpha=0.0_rk, a0_phi=0.0_rk, a0_theta=0.0_rk
-      real(kind=rk), allocatable :: ai_phi(:), bi_phi(:), ai_theta(:), &
-         bi_theta(:), ai_alpha(:), bi_alpha(:)
+      real(kind=rk), allocatable :: ai_phi(:), bi_phi(:), ai_theta(:), bi_theta(:), ai_alpha(:), bi_alpha(:)
       integer :: nfft_phi=0, nfft_alpha=0, nfft_theta=0
       ! coefficients are read only once from file (or set differently)
       logical :: initialized = .false.
       ! some details about the file, if reading from ini file
-      character(len=clong) :: infile_convention="", infile_type="", infile_units="", infile=""
+      character(len=clong) :: infile_convention="", infile_type="", infile_units="", infile="NOT-USED"
    end type
 
 
@@ -264,8 +263,9 @@ module module_insects
       ! Wing kinematics
       !--------------------------------------------------------------
       ! wing kinematics Fourier coefficients
-      type(wingkinematics) :: kine_wing_l, kine_wing_r
-      type(wingkinematics) :: kine_wing_l2, kine_wing_r2
+      type(wingkinematics_type) :: WingKinematics(1:4)
+
+      
       ! the following flag makes the code write the kinematics log to either kinematics.t
       ! (regular simulation) or kinematics.dry-run.t (for a dry run). The reason for this
       ! is that during postprocessing of an existing run, the dry run would overwrite the
@@ -279,20 +279,19 @@ module module_insects
       ! parameters that control shape of wings, body, and motion
       !-------------------------------------------------------------
       character(len=clong) :: WingShape(1:4)=["","","",""] ! left, right, 2nd left, 2nd right
+      character(len=clong) :: FlappingMotion(1:4)=["","","",""] ! left, right, 2nd left, 2nd right
       character(len=clong) :: BodyType="", BodyMotion=""
-      character(len=clong) :: FlappingMotion_right="", FlappingMotion_left=""
-      character(len=clong) :: FlappingMotion_right2="", FlappingMotion_left2=""
       logical :: LeftWing=.true., RightWing=.true.
       logical :: LeftWing2=.false., RightWing2=.false.
       ! for some parts of the code, it is good to have this array:
       ! wing id number: 1 = left, 2 = right, 3 = 2nd left, 4 = 2nd right
-      logical :: wings_used(1:4) = .false.
+      logical :: WingsUsed(1:4) = .false.
       ! parameters for body:
       real(kind=rk) :: L_body=0.0_rk, b_body=0.0_rk, R_head=0.0_rk, R_eye=0.0_rk
       ! parameters for wing shape:
       real(kind=rk) :: b_top=0.0_rk, b_bot=0.0_rk, L_span=0.0_rk, WingThickness=0.0_rk
       ! this is a safety distance for smoothing:
-      real(kind=rk) :: safety=0.0_rk, smooth=0.0_rk, C_smooth=1.0_rk, dx_reference=0.0_rk, C_shell_thickness=5.0_rk
+      real(kind=rk) :: safety=0.0_rk, L_smooth=0.0_rk, C_smooth=1.0_rk, dx_reference=0.0_rk, C_shell_thickness=5.0_rk
       ! some more VPM parameters will be stored in the insect, that can be individual
       character(len=clong) :: smoothing_type=""
       integer :: smoothing_type_int=0  ! in point-wise loops, we have to avoid character comparisons, so we use this integer
@@ -376,8 +375,6 @@ contains
 #include "stroke_plane.f90"
 #include "kineloader.f90"
 #include "pointcloud.f90"
-! #include "fractal_trees.f90"
-#include "active_grid_winglets.f90"
 !---------------------------------------
 
 
@@ -732,12 +729,12 @@ contains
       ! Insect%smoothing_thickness=="local"  : smoothing_layer = c_sm * 2**-J * L/(BS-1)
       ! Insect%smoothing_thickness=="global" : smoothing_layer = c_sm * 2**-Jmax * L/(BS-1)
       if (Insect%smoothing_thickness=="local") then
-         Insect%smooth = Insect%C_smooth*maxval(ddx)
+         Insect%L_smooth = Insect%C_smooth*maxval(ddx)
          if (Insect%smoothing_type == "hester") then
-            Insect%smooth = Insect%epsilon_hester
+            Insect%L_smooth = Insect%epsilon_hester
             Insect%safety = max(5.0_rk*Insect%epsilon_hester, 2*maxval(ddx))
         else
-            Insect%safety = 3.5_rk*Insect%smooth
+            Insect%safety = 3.5_rk*Insect%L_smooth
         end if
       endif
 

@@ -40,9 +40,9 @@ subroutine insect_init(time, fname_ini, Insect_ID, resume_backup, fname_backup, 
 
     type(inifile) :: PARAMS
     real(kind=rk) :: defaultvec(1:3), defaultvec5(5)
-    character(len=clong) :: DoF_string, dummystr, insect_name_str
+    character(len=clong) :: DoF_string, dummystr, SECTION
     integer :: j, tmp, mpirank, mpicode, ntri
-    integer(kind=2) :: wingID, Nwings
+    integer(kind=2) :: wingID
     logical :: section_exists
 
     ! in this module, we use the logical ROOT to avoid the integer comparison mpirank==0
@@ -60,25 +60,25 @@ subroutine insect_init(time, fname_ini, Insect_ID, resume_backup, fname_backup, 
 
     ! we differentiate different insects, legacy one is [Insects], new INI files are "Insect1", "Insect2", etc
     if (Insect_ID > 1) then
-        write(insect_name_str, '(A,I0)') "Insect", Insect_ID
+        write(SECTION, '(A,I0)') "Insect", Insect_ID
         ! check if section exists
-        call param_section_exists_mpi(PARAMS, insect_name_str, section_exists)
+        call param_section_exists_mpi(PARAMS, SECTION, section_exists)
         if (.not. section_exists) then
-            call abort(260602, "Insect flew away, no section found for " // trim(insect_name_str))
+            call abort(260602, "Insect flew away, no section found for " // trim(SECTION))
         endif
     else
         ! If insect_ID==1, we either read from [Insects], which is the old format, or from the new format [Insect1]
         ! if [Insects] is found - we take that. That ensures compatibility with old INI files.
-        insect_name_str = "Insects"
+        SECTION = "Insects"
         ! check if insect parameters are under legacy name
-        call param_section_exists_mpi(PARAMS, insect_name_str, section_exists)
+        call param_section_exists_mpi(PARAMS, SECTION, section_exists)
         if (.not. section_exists) then
             ! if not, then we use "Insect1" as section name for the first insect, to be consistent with the other ones
-            write(insect_name_str, '(A,I0)') "Insect", Insect_ID
-            call param_section_exists_mpi(PARAMS, insect_name_str, section_exists)
+            write(SECTION, '(A,I0)') "Insect", Insect_ID
+            call param_section_exists_mpi(PARAMS, SECTION, section_exists)
             ! if this is also not found, then we give up
             if (.not. section_exists) then
-                call abort(260602, "Insect flew away, no section found for " // trim(insect_name_str))
+                call abort(260602, "Insect flew away, no section found for " // trim(SECTION))
             endif
         endif
     endif
@@ -99,7 +99,7 @@ subroutine insect_init(time, fname_ini, Insect_ID, resume_backup, fname_backup, 
         write(*,'(A)') "           ''--'         `--''   "
         write(*,'(A)') "---------------------------------------------------------------------------------------"
         write(*,'(A)') "Initializing insect module!"
-        write(*,'(A)') "*.ini file is: "//trim(adjustl(fname_ini))// " and insect is in section "//trim(adjustl(insect_name_str))
+        write(*,'(A)') "*.ini file is: "//trim(adjustl(fname_ini))// " and insect is in section "//trim(adjustl(SECTION))
         write(*,'(80("<"))')
         write(*,'("Lx=",g12.4," Ly=",g12.4," Lz=",g12.4," nu=",g12.4)') xl, yl, zl, nu
         write(*,'("dx=",g12.4," nx_equidistant=",i6)') dx_reference, nint(xl/dx_reference)
@@ -152,167 +152,124 @@ subroutine insect_init(time, fname_ini, Insect_ID, resume_backup, fname_backup, 
     ! WINGS TO BE SIMULATED
     !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     ! Which wings are to be simulated ?
-    call read_param_mpi(PARAMS,insect_name_str,"LeftWing",Insects(Insect_ID)%LeftWing,.true.)
-    call read_param_mpi(PARAMS,insect_name_str,"RightWing",Insects(Insect_ID)%RightWing,.true.)
-    call read_param_mpi(PARAMS,insect_name_str,"LeftWing2",Insects(Insect_ID)%LeftWing2,.false.)
-    call read_param_mpi(PARAMS,insect_name_str,"RightWing2",Insects(Insect_ID)%RightWing2,.false.)
+    call read_param_mpi(PARAMS, SECTION, "LeftWing", Insects(Insect_ID)%LeftWing, .true.)
+    call read_param_mpi(PARAMS, SECTION, "RightWing", Insects(Insect_ID)%RightWing, .true.)
+    call read_param_mpi(PARAMS, SECTION, "LeftWing2", Insects(Insect_ID)%LeftWing2, .false.)
+    call read_param_mpi(PARAMS, SECTION, "RightWing2", Insects(Insect_ID)%RightWing2, .false.)
 
     ! Assemble the individual variables in a vector.
-    ! TODO: The individual ones should probably be removed.
+    ! TODO: The individual variables should probably be removed.
     ! wing id number: 1 = left, 2 = right, 3 = 2nd left, 4 = 2nd right
-    Insects(Insect_ID)%wings_used = (/  Insects(Insect_ID)%LeftWing, Insects(Insect_ID)%RightWing, &
+    Insects(Insect_ID)%WingsUsed = (/  Insects(Insect_ID)%LeftWing, Insects(Insect_ID)%RightWing, &
                                         Insects(Insect_ID)%LeftWing2, Insects(Insect_ID)%RightWing2 /)
     
     ! determine whether the second pair of wings is present
     ! This variable is used to control output files.
-    if ( ( Insects(Insect_ID)%LeftWing2) .or. ( Insects(Insect_ID)%RightWing2) ) then
+    Insects(Insect_ID)%second_wing_pair = .false.
+    if ( any(Insects(Insect_ID)%WingsUsed(3:4)) ) then
         Insects(Insect_ID)%second_wing_pair = .true.
-    else
-        Insects(Insect_ID)%second_wing_pair = .false.
     endif
 
     !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    ! read data for the first pair of wings
+    ! Wing shapes
     !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    call read_param_mpi(PARAMS,insect_name_str,"WingShape", dummystr, "UNKNOWN")
+    ! Read wing shapes (forewings)
+    call read_param_mpi(PARAMS, SECTION, "WingShapeL", Insects(Insect_ID)%WingShape(1), 'NOT-USED')
+    call read_param_mpi(PARAMS, SECTION, "WingShapeR", Insects(Insect_ID)%WingShape(2), 'NOT-USED')
+
+    ! Read wing shapes for second wing pair (usually hindwings or elytra)
+    call read_param_mpi(PARAMS, SECTION, "WingShape2L", Insects(Insect_ID)%WingShape(3),"NOT-USED")
+    call read_param_mpi(PARAMS, SECTION, "WingShape2R", Insects(Insect_ID)%WingShape(4),"NOT-USED")
+
+    ! Rectangular wing parameters
+    call read_param_mpi(PARAMS, SECTION, "b_top", Insects(Insect_ID)%b_top, 0.0_rk)
+    call read_param_mpi(PARAMS, SECTION, "b_bot", Insects(Insect_ID)%b_bot, 0.0_rk)
+
+    ! Abort if deprecated parameter WingShape (was used for L/R symmetric animals) is used
+    call read_param_mpi(PARAMS, SECTION, "WingShape", dummystr, "UNKNOWN")
     if (dummystr /= "UNKNOWN") then
         call abort(2307261,"Insect-module: the INI-parameter __WingShape__ is deprecated and was removed. Please set&
         & individual shapes in the Insects section of your INI file (WingShapeR, WingShapeL, WingShapeR2, WingShapeL2).&
         & Even if all wings are the same, we require a shape for each one.")
     endif
-    ! Read wing shapes
-    call read_param_mpi(PARAMS,insect_name_str,"WingShapeL",Insects(Insect_ID)%WingShape(1), 'UNKNOWN-NOT-SET')
-    call read_param_mpi(PARAMS,insect_name_str,"WingShapeR",Insects(Insect_ID)%WingShape(2), 'UNKNOWN-NOT-SET')
-    ! Rectangular wing parameters
-    call read_param_mpi(PARAMS,insect_name_str,"b_top",Insects(Insect_ID)%b_top, 0.0_rk)
-    call read_param_mpi(PARAMS,insect_name_str,"b_bot",Insects(Insect_ID)%b_bot, 0.0_rk)
-    ! Kinematics
-    call read_param_mpi(PARAMS,insect_name_str,"FlappingMotion_right",Insects(Insect_ID)%FlappingMotion_right,"UNKNOWN-NOT-SET")
-    call read_param_mpi(PARAMS,insect_name_str,"FlappingMotion_left",Insects(Insect_ID)%FlappingMotion_left,"UNKNOWN-NOT-SET")
 
+    !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    ! WING KINEMATICS
+    !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    ! Wingbeat kinematics for each wing
+    !-- wingID: 1 = left, 2 = right, 3 = 2nd left, 4 = 2nd right
+    call read_param_mpi(PARAMS, SECTION, "FlappingMotion_left"  , Insects(Insect_ID)%FlappingMotion(1), "NOT-USED")
+    call read_param_mpi(PARAMS, SECTION, "FlappingMotion_right" , Insects(Insect_ID)%FlappingMotion(2), "NOT-USED")
+    call read_param_mpi(PARAMS, SECTION, "FlappingMotion_left2" , Insects(Insect_ID)%FlappingMotion(3), "NOT-USED")
+    call read_param_mpi(PARAMS, SECTION, "FlappingMotion_right2", Insects(Insect_ID)%FlappingMotion(4), "NOT-USED")
 
-    if ( index(Insects(Insect_ID)%FlappingMotion_right,"from_file::") /= 0 ) then
-        ! new syntax, uses fourier/hermite periodic kinematics read from *.ini file
-        Insects(Insect_ID)%kine_wing_r%infile = Insects(Insect_ID)%FlappingMotion_right( 12:clong  )
-        Insects(Insect_ID)%FlappingMotion_right = "from_file"      
+    ! this one file contains all the kinematics (four wings and body)
+    call read_param_mpi(PARAMS, SECTION, "infile_kineloader", Insects(Insect_ID)%infile_kineloader, "none")
 
-    elseif ( Insects(Insect_ID)%FlappingMotion_right == "from_file" ) then
-        ! old syntax, implies symmetric periodic motion, read from *.ini file
-        call abort(2307263,"Insect-module: the INI-parameter __infile__ is deprecated and was removed. It was used&
-        & for symmetric wing motion, in combination with FlappingMotion_right=from_file.&
-        & This possibility has been removed, and you need to set FlappingMotion_right=from_file::XXX.ini for all&
-        & wings in the simulation, even if they have the same flapping motion. Note difference from_file vs from_file::")
-    endif
+    ! if the wing motion is read from file (the most often used case), then we extract the file to be used (from the 
+    ! string "from_file::FILENAME.INI" we extract "FILENAME.INI")
+    do wingID = 1, 4
+        if ( index(Insects(Insect_ID)%FlappingMotion(wingID), "from_file::") /= 0 ) then
+            ! Store the file to be used in the wingkinematics 
+            Insects(Insect_ID)%WingKinematics(wingID)%infile = Insects(Insect_ID)%FlappingMotion(wingID)( 12:clong  )
+            ! Set type to from_file - then the kinematics are read and initialized from (and not hardcoded coefficients)
+            Insects(Insect_ID)%FlappingMotion(wingID) = "from_file"      
 
-    if ( index(Insects(Insect_ID)%FlappingMotion_left,"from_file::") /= 0 ) then
-        ! new syntax, uses fourier/hermite periodic kinematics read from *.ini file
-        Insects(Insect_ID)%kine_wing_l%infile = Insects(Insect_ID)%FlappingMotion_left( 12:clong  )
-        Insects(Insect_ID)%FlappingMotion_left = "from_file"
-
-    elseif ( Insects(Insect_ID)%FlappingMotion_left == "from_file" ) then
-        ! old syntax, implies symmetric periodic motion, read from *.ini file
-        call abort(2307264,"Insect-module: the INI-parameter __infile__ is deprecated and was removed. It was used&
-        & for symmetric wing motion, in combination with FlappingMotion_left=from_file.&
-        & This possibility has been removed, and you need to set FlappingMotion_right=from_file::XXX.ini for all&
-        & wings in the simulation, even if they have the same flapping motion. Note difference from_file vs from_file::")
-    endif
+        elseif ( Insects(Insect_ID)%FlappingMotion(wingID) == "from_file" ) then
+            ! old syntax, implies symmetric periodic motion, read from *.ini file
+            call abort(2307263,"Insect-module: the INI-parameter __infile__ is deprecated and was removed. It was used&
+            & for symmetric wing motion, in combination with FlappingMotion_right=from_file.&
+            & This possibility has been removed, and you need to set FlappingMotion_right=from_file::XXX.ini for all&
+            & wings in the simulation, even if they have the same flapping motion. Note difference from_file vs from_file::")
+        endif
+    enddo
 
     if (root) then
-        write(*,*) "Left wing: "//trim(adjustl(Insects(Insect_ID)%FlappingMotion_left))
-        write(*,*) "Left wing: "//trim(adjustl(Insects(Insect_ID)%kine_wing_l%infile))
-        write(*,*) "Right wing: "//trim(adjustl(Insects(Insect_ID)%FlappingMotion_right))
-        write(*,*) "Right wing: "//trim(adjustl(Insects(Insect_ID)%kine_wing_r%infile))
+        !-- wingID: 1 = left, 2 = right, 3 = 2nd left, 4 = 2nd right
+        write(*,*) "-------------- Wingbeat kinematics summary --------------"
+        write(*,*) "Left wing motion: "//trim(adjustl(Insects(Insect_ID)%FlappingMotion(1)))
+        write(*,*) "Left wing infile: "//trim(adjustl(Insects(Insect_ID)%WingKinematics(1)%infile))
+        write(*,*) "Right wing motion: "//trim(adjustl(Insects(Insect_ID)%FlappingMotion(2)))
+        write(*,*) "Right wing infile: "//trim(adjustl(Insects(Insect_ID)%WingKinematics(2)%infile))
+        write(*,*) ""
+        write(*,*) "2nd Left wing motion: "//trim(adjustl(Insects(Insect_ID)%FlappingMotion(3)))
+        write(*,*) "2nd Left wing infile: "//trim(adjustl(Insects(Insect_ID)%WingKinematics(3)%infile))
+        write(*,*) "2nd Right wing motion: "//trim(adjustl(Insects(Insect_ID)%FlappingMotion(4)))
+        write(*,*) "2nd Right wing infile: "//trim(adjustl(Insects(Insect_ID)%WingKinematics(4)%infile))
+        write(*,*) "---------------------------------------------------------"
     endif
 
-    ! these flags trigger reading the kinematics from file when the Flapping
-    ! motion is first called
-    Insects(Insect_ID)%kine_wing_l%initialized = .false.
-    Insects(Insect_ID)%kine_wing_r%initialized = .false.
-
-    ! read data for the second pair of wings
-    if (Insects(Insect_ID)%second_wing_pair) then
-        ! Read wing shapes for second wing pair (usually hindwings or elytra)
-        call read_param_mpi(PARAMS,insect_name_str,"WingShape2L",Insects(Insect_ID)%WingShape(3),"UNKNOWN-NOT-SET")
-        call read_param_mpi(PARAMS,insect_name_str,"WingShape2R",Insects(Insect_ID)%WingShape(4),"UNKNOWN-NOT-SET")
-
-        ! Kinematics
-        call read_param_mpi(PARAMS,insect_name_str,"FlappingMotion_right2",Insects(Insect_ID)%FlappingMotion_right2,"UNKNOWN-NOT-SET")
-        call read_param_mpi(PARAMS,insect_name_str,"FlappingMotion_left2",Insects(Insect_ID)%FlappingMotion_left2,"UNKNOWN-NOT-SET")
-
-        if ( index(Insects(Insect_ID)%FlappingMotion_right2,"from_file::") /= 0 ) then
-            ! new syntax, uses fourier/hermite periodic kinematics read from *.ini file
-            Insects(Insect_ID)%kine_wing_r2%infile = Insects(Insect_ID)%FlappingMotion_right2( 12:clong  )
-            Insects(Insect_ID)%FlappingMotion_right2 = "from_file"
-
-        elseif ( Insects(Insect_ID)%FlappingMotion_right2 == "from_file" ) then
-            ! old syntax removed. Use insect_migration_assistent.py to convert old INI file
-            call abort(2307266,"Insect-module: the INI-parameter __infile__ is deprecated and was removed. It was used&
-            & for symmetric wing motion, in combination with FlappingMotion_left2=from_file.&
-            & This possibility has been removed, and you need to set FlappingMotion_right=from_file::XXX.ini for all&
-            & wings in the simulation, even if they have the same flapping motion. Note difference from_file vs from_file::")
-
-        endif
-
-        if ( index(Insects(Insect_ID)%FlappingMotion_left2,"from_file::") /= 0 ) then
-            ! new syntax, uses fourier/hermite periodic kinematics read from *.ini file
-            Insects(Insect_ID)%kine_wing_l2%infile = Insects(Insect_ID)%FlappingMotion_left2( 12:clong  )
-            Insects(Insect_ID)%FlappingMotion_left2 = "from_file"
-
-        elseif ( Insects(Insect_ID)%FlappingMotion_left2 == "from_file" ) then
-            ! old syntax removed. Use insect_migration_assistent.py to convert old INI file
-            call abort(2307268,"Insect-module: the INI-parameter __infile__ is deprecated and was removed. It was used&
-            & for symmetric wing motion, in combination with FlappingMotion_left2=from_file.&
-            & This possibility has been removed, and you need to set FlappingMotion_right=from_file::XXX.ini for all&
-            & wings in the simulation, even if they have the same flapping motion. Note difference from_file vs from_file::")
-
-        endif
-
-        if (root) then
-            write(*,*) "Second left wing: "//trim(adjustl(Insects(Insect_ID)%FlappingMotion_left2))
-            write(*,*) "Second left wing: "//trim(adjustl(Insects(Insect_ID)%kine_wing_l2%infile))
-            write(*,*) "Second right wing: "//trim(adjustl(Insects(Insect_ID)%FlappingMotion_right2))
-            write(*,*) "Second right wing: "//trim(adjustl(Insects(Insect_ID)%kine_wing_r2%infile))
-        endif
-    endif
-
-    ! these flags trigger reading the kinematics from file when the Flapping
-    ! motion is first called
-    Insects(Insect_ID)%kine_wing_l2%initialized = .false.
-    Insects(Insect_ID)%kine_wing_r2%initialized = .false.
-
-    call read_param_mpi(PARAMS,insect_name_str,"BodyType",Insects(Insect_ID)%BodyType,"ellipsoid")
-    call read_param_mpi(PARAMS,insect_name_str,"BodyMotion",Insects(Insect_ID)%BodyMotion,"tethered")
-    ! this one file contains all the kinematics (four wings and body)
-    call read_param_mpi(PARAMS,insect_name_str,"infile_kineloader",Insects(Insect_ID)%infile_kineloader,"none")
-    call read_param_mpi(PARAMS,insect_name_str,"mass",Insects(Insect_ID)%mass, 1._rk)
-    call read_param_mpi(PARAMS,insect_name_str,"gravity",Insects(Insect_ID)%gravity, 0.0_rk)
-    call read_param_mpi(PARAMS,insect_name_str,"gravity_x",Insects(Insect_ID)%gravity_x, 0.0_rk)
-    call read_param_mpi(PARAMS,insect_name_str,"gravity_y",Insects(Insect_ID)%gravity_y, 0.0_rk)
-    call read_param_mpi(PARAMS,insect_name_str,"WingThickness",Insects(Insect_ID)%WingThickness, 4.0_rk*dx_reference)
-    call read_param_mpi(PARAMS,insect_name_str,"J_body_yawpitchroll",defaultvec, (/0.0_rk,0.0_rk,0.0_rk/))
+    call read_param_mpi(PARAMS, SECTION, "BodyType",Insects(Insect_ID)%BodyType,"ellipsoid")
+    call read_param_mpi(PARAMS, SECTION, "BodyMotion",Insects(Insect_ID)%BodyMotion,"tethered")
+    call read_param_mpi(PARAMS, SECTION, "mass",Insects(Insect_ID)%mass, 1._rk)
+    call read_param_mpi(PARAMS, SECTION, "gravity",Insects(Insect_ID)%gravity, 0.0_rk)
+    call read_param_mpi(PARAMS, SECTION, "gravity_x",Insects(Insect_ID)%gravity_x, 0.0_rk)
+    call read_param_mpi(PARAMS, SECTION, "gravity_y",Insects(Insect_ID)%gravity_y, 0.0_rk)
+    call read_param_mpi(PARAMS, SECTION, "WingThickness",Insects(Insect_ID)%WingThickness, 4.0_rk*dx_reference)
+    call read_param_mpi(PARAMS, SECTION, "J_body_yawpitchroll",defaultvec, (/0.0_rk,0.0_rk,0.0_rk/))
     Insects(Insect_ID)%Jroll_body  = defaultvec(3)
     Insects(Insect_ID)%Jyaw_body   = defaultvec(1)
     Insects(Insect_ID)%Jpitch_body = defaultvec(2)
-    call read_param_mpi(PARAMS,insect_name_str,"x0",Insects(Insect_ID)%x0, (/0.5_rk*xl,0.5_rk*yl,0.5_rk*zl/))
-    call read_param_mpi(PARAMS,insect_name_str,"v0",Insects(Insect_ID)%v0, (/0.0_rk, 0.0_rk, 0.0_rk/))
-    call read_param_mpi(PARAMS,insect_name_str,"yawpitchroll_0",Insects(Insect_ID)%yawpitchroll_0,(/0.0_rk, 0.0_rk, 0.0_rk/))
-    call read_param_mpi(PARAMS,insect_name_str,"yawpitchroll_a1",Insects(Insect_ID)%yawpitchroll_a1,(/0.0_rk, 0.0_rk, 0.0_rk/))
-    call read_param_mpi(PARAMS,insect_name_str,"yawpitchroll_b1",Insects(Insect_ID)%yawpitchroll_b1,(/0.0_rk, 0.0_rk, 0.0_rk/))
+    call read_param_mpi(PARAMS, SECTION, "x0",Insects(Insect_ID)%x0, (/0.5_rk*xl,0.5_rk*yl,0.5_rk*zl/))
+    call read_param_mpi(PARAMS, SECTION, "v0",Insects(Insect_ID)%v0, (/0.0_rk, 0.0_rk, 0.0_rk/))
+    call read_param_mpi(PARAMS, SECTION, "yawpitchroll_0",Insects(Insect_ID)%yawpitchroll_0,(/0.0_rk, 0.0_rk, 0.0_rk/))
+    call read_param_mpi(PARAMS, SECTION, "yawpitchroll_a1",Insects(Insect_ID)%yawpitchroll_a1,(/0.0_rk, 0.0_rk, 0.0_rk/))
+    call read_param_mpi(PARAMS, SECTION, "yawpitchroll_b1",Insects(Insect_ID)%yawpitchroll_b1,(/0.0_rk, 0.0_rk, 0.0_rk/))
     ! convert yawpitchroll to radiants
     Insects(Insect_ID)%yawpitchroll_0 = Insects(Insect_ID)%yawpitchroll_0 * (pi/180.0_rk)
     Insects(Insect_ID)%yawpitchroll_a1 = Insects(Insect_ID)%yawpitchroll_a1 * (pi/180.0_rk)
     Insects(Insect_ID)%yawpitchroll_b1 = Insects(Insect_ID)%yawpitchroll_b1 * (pi/180.0_rk)
-    call read_param_mpi(PARAMS,insect_name_str,"eta0",Insects(Insect_ID)%eta0, 0.0_rk)
+    call read_param_mpi(PARAMS, SECTION, "eta0",Insects(Insect_ID)%eta0, 0.0_rk)
     Insects(Insect_ID)%eta0 = Insects(Insect_ID)%eta0*(pi/180.0_rk)
 
-    call read_param_mpi(PARAMS,insect_name_str,"pointcloudfile",Insects(Insect_ID)%pointcloudfile,"none")
+    call read_param_mpi(PARAMS, SECTION, "pointcloudfile",Insects(Insect_ID)%pointcloudfile,"none")
 
 
 
     ! degrees of freedom for free flight solver. The string from ini file contains
     ! 6 characters 1 or 0 that turn on/off x,y,z,yaw,pitch,roll degrees of freedom
     ! by multiplying the respective RHS by zero, keeping the value thus constant
-    call read_param_mpi(PARAMS,insect_name_str,"DoF",DoF_string, "111111")
+    call read_param_mpi(PARAMS, SECTION, "DoF",DoF_string, "111111")
     do j=1,6
         read (DoF_string(j:j), '(i1)') tmp
         Insects(Insect_ID)%DoF_on_off(j) = dble(tmp)
@@ -321,16 +278,16 @@ subroutine insect_init(time, fname_ini, Insect_ID, resume_backup, fname_backup, 
 
     ! wing inertia tensor (we currently assume two identical forewings and two identical hindwings)
     ! this allows computing inertial power and wing FSI model
-    call read_param_mpi(PARAMS,insect_name_str,"Jxx",Insects(Insect_ID)%Jxx,0.0_rk)
-    call read_param_mpi(PARAMS,insect_name_str,"Jyy",Insects(Insect_ID)%Jyy,0.0_rk)
-    call read_param_mpi(PARAMS,insect_name_str,"Jzz",Insects(Insect_ID)%Jzz,0.0_rk)
-    call read_param_mpi(PARAMS,insect_name_str,"Jxy",Insects(Insect_ID)%Jxy,0.0_rk)
-    call read_param_mpi(PARAMS,insect_name_str,"Jxx2",Insects(Insect_ID)%Jxx2,0.0_rk)
-    call read_param_mpi(PARAMS,insect_name_str,"Jyy2",Insects(Insect_ID)%Jyy2,0.0_rk)
-    call read_param_mpi(PARAMS,insect_name_str,"Jzz2",Insects(Insect_ID)%Jzz2,0.0_rk)
-    call read_param_mpi(PARAMS,insect_name_str,"Jxy2",Insects(Insect_ID)%Jxy2,0.0_rk)
+    call read_param_mpi(PARAMS, SECTION, "Jxx",Insects(Insect_ID)%Jxx,0.0_rk)
+    call read_param_mpi(PARAMS, SECTION, "Jyy",Insects(Insect_ID)%Jyy,0.0_rk)
+    call read_param_mpi(PARAMS, SECTION, "Jzz",Insects(Insect_ID)%Jzz,0.0_rk)
+    call read_param_mpi(PARAMS, SECTION, "Jxy",Insects(Insect_ID)%Jxy,0.0_rk)
+    call read_param_mpi(PARAMS, SECTION, "Jxx2",Insects(Insect_ID)%Jxx2,0.0_rk)
+    call read_param_mpi(PARAMS, SECTION, "Jyy2",Insects(Insect_ID)%Jyy2,0.0_rk)
+    call read_param_mpi(PARAMS, SECTION, "Jzz2",Insects(Insect_ID)%Jzz2,0.0_rk)
+    call read_param_mpi(PARAMS, SECTION, "Jxy2",Insects(Insect_ID)%Jxy2,0.0_rk)
 
-    call read_param_mpi(PARAMS,insect_name_str,"startup_conditioner",Insects(Insect_ID)%startup_conditioner,"no")
+    call read_param_mpi(PARAMS, SECTION, "startup_conditioner",Insects(Insect_ID)%startup_conditioner,"no")
 
     ! 28/01/2019: Thomas. Discovered that this was done block based, i.e. the smoothing layer
     ! had different thickness, if some blocks happened to be at different levels (and still carry
@@ -340,9 +297,9 @@ subroutine insect_init(time, fname_ini, Insect_ID, resume_backup, fname_backup, 
     ! Insect%smoothing_thickness=="global" : smoothing_layer = c_sm * 2**-Jmax * L/(BS-1)
     ! NOTE: for FLUSI, this has no impact! Here, the grid is constant and equidistant.
     ! NOTE: 05/2020 Thomas, I changed the default back to local.
-    call read_param_mpi(PARAMS,insect_name_str,"smoothing_thickness",Insects(Insect_ID)%smoothing_thickness,"global")
-    call read_param_mpi(PARAMS,insect_name_str,"C_smooth",Insects(Insect_ID)%C_smooth,1.0_rk)
-    call read_param_mpi(PARAMS,insect_name_str,"BodySuperSTLfile",Insects(Insect_ID)%BodySuperSTLfile,"none.superstl")
+    call read_param_mpi(PARAMS, SECTION, "smoothing_thickness",Insects(Insect_ID)%smoothing_thickness,"global")
+    call read_param_mpi(PARAMS, SECTION, "C_smooth",Insects(Insect_ID)%C_smooth,1.0_rk)
+    call read_param_mpi(PARAMS, SECTION, "BodySuperSTLfile",Insects(Insect_ID)%BodySuperSTLfile,"none.superstl")
     ! when using CT data, code computes the mask function in a shell around fluid-solid interface.
     ! The tickness of the shell is not a critical parameter, but it affects performance. Thicker shell
     ! means more points and thus more comput effort. It is given in multiples of C_smooth, that means
@@ -350,37 +307,40 @@ subroutine insect_init(time, fname_ini, Insect_ID, resume_backup, fname_backup, 
     ! Why is the shell thickness dependent on resolution? The cost to generate the mask depends on the number of
     ! triangles and the number of points in the shell. As the latter is coupled to dx and the former is constant
     ! this way the mask generation cost is constant when increasing the resolution.
-    call read_param_mpi(PARAMS,insect_name_str,"C_shell_thickness",Insects(Insect_ID)%C_shell_thickness, 3.0_rk)
+    call read_param_mpi(PARAMS, SECTION, "C_shell_thickness",Insects(Insect_ID)%C_shell_thickness, 3.0_rk)
 
     Insects(Insect_ID)%dx_reference = dx_reference
-    Insects(Insect_ID)%smooth = Insects(Insect_ID)%C_smooth*dx_reference
+    Insects(Insect_ID)%L_smooth = Insects(Insect_ID)%C_smooth*dx_reference
     if (Insects(Insect_ID)%smoothing_type == "hester") then
-        Insects(Insect_ID)%smooth = Insects(Insect_ID)%epsilon_hester
+        Insects(Insect_ID)%L_smooth = Insects(Insect_ID)%epsilon_hester
         Insects(Insect_ID)%safety = max(5.0_rk*Insects(Insect_ID)%epsilon_hester, 2*dx_reference)
     else
-        Insects(Insect_ID)%safety = 3.5_rk*Insects(Insect_ID)%smooth
+        Insects(Insect_ID)%safety = 3.5_rk*Insects(Insect_ID)%L_smooth
     end if
 
-    ! wing hinges (root points)
+    ! wing hinges (origin of rotation relative to the body)
     defaultvec=(/0.0_rk, +Insects(Insect_ID)%b_body, 0.0_rk /)
-    call read_param_mpi(PARAMS,insect_name_str,"x_pivot_l",Insects(Insect_ID)%x_pivot_l_b, defaultvec)
+    call read_param_mpi(PARAMS, SECTION, "x_pivot_l",Insects(Insect_ID)%x_pivot_l_b, defaultvec)
 
     defaultvec=(/0.0_rk, -Insects(Insect_ID)%b_body, 0.0_rk /)
-    call read_param_mpi(PARAMS,insect_name_str,"x_pivot_r",Insects(Insect_ID)%x_pivot_r_b, defaultvec)
+    call read_param_mpi(PARAMS, SECTION, "x_pivot_r",Insects(Insect_ID)%x_pivot_r_b, defaultvec)
 
     ! read data for the second pair of wing hinges
     if (Insects(Insect_ID)%second_wing_pair) then
         defaultvec = Insects(Insect_ID)%x_pivot_l_b
-        call read_param_mpi(PARAMS,insect_name_str,"x_pivot_l2",Insects(Insect_ID)%x_pivot_l2_b, defaultvec)
+        call read_param_mpi(PARAMS, SECTION, "x_pivot_l2",Insects(Insect_ID)%x_pivot_l2_b, defaultvec)
         defaultvec = Insects(Insect_ID)%x_pivot_r_b
-        call read_param_mpi(PARAMS,insect_name_str,"x_pivot_r2",Insects(Insect_ID)%x_pivot_r2_b, defaultvec)
+        call read_param_mpi(PARAMS, SECTION, "x_pivot_r2",Insects(Insect_ID)%x_pivot_r2_b, defaultvec)
     endif
 
+    !---------------------------------------------------------------------------
+    ! Setup of colors (used to tell different parts of the animal apart)
+    !---------------------------------------------------------------------------
     ! default colors for body, left wing, right wing, left wing 2, right wing 2, geometry / full insect
     defaultvec5 = (/1.0_rk, 2.0_rk, 3.0_rk, 4.0_rk, 5.0_rk/)
     if (present(colors_default)) defaultvec5 = real(colors_default(1:5), kind=rk)
 
-    call read_param_mpi(PARAMS,insect_name_str,"colors", defaultvec5, defaultvec5)
+    call read_param_mpi(PARAMS, SECTION, "colors", defaultvec5, defaultvec5)
     Insects(Insect_ID)%color_body = int(defaultvec5(1), kind=2)
     Insects(Insect_ID)%color_l    = int(defaultvec5(2), kind=2)
     Insects(Insect_ID)%color_r    = int(defaultvec5(3), kind=2)
@@ -396,6 +356,27 @@ subroutine insect_init(time, fname_ini, Insect_ID, resume_backup, fname_backup, 
 
     ! clean ini file
     call clean_ini_file_mpi(PARAMS)
+
+    !---------------------------------------------------------------------------
+    ! Wing shapes setup 
+    !---------------------------------------------------------------------------
+    ! Processing of wing shapes (Setup from file or hardcoded shapes without a setup)
+    ! wingID: 1 = left, 2 = right, 3 = 2nd left, 4 = 2nd right
+    do wingID = 1, 4
+        ! do not try to setup wings that are not used
+        if (Insects(Insect_ID)%WingsUsed(wingID)) then
+            ! exclude wings that are hard-coded, otherwise, call file initialization routine
+            if (Insects(Insect_ID)%WingShape(wingID)/="pointcloud" .and. Insects(Insect_ID)%WingShape(wingID)/="mosquito_iams" .and. &
+                Insects(Insect_ID)%WingShape(wingID)/="suzuki" .and. Insects(Insect_ID)%WingShape(wingID)/="rectangular" .and. &
+                Insects(Insect_ID)%WingShape(wingID)/="TwoEllipses" .and. (Insects(Insect_ID)%wing_file_type(wingID)) /= "kleemeier" &
+                .and. Insects(Insect_ID)%WingShape(wingID)/="suzuki_butterfly".and. Insects(Insect_ID)%WingShape(wingID)/="none") then
+
+                ! we have some pre-defined, hard-coded data, but also can read the wing shape
+                ! from INI files. This is done in the routine below.
+                call Setup_WingShape(Insects(Insect_ID), wingID)
+            endif
+        endif
+    enddo
 
     !---------------------------------------------------------------------------
     ! initialization for superSTl body
@@ -439,37 +420,12 @@ subroutine insect_init(time, fname_ini, Insect_ID, resume_backup, fname_backup, 
     call Update_Insect( time, Insects(Insect_ID) )
 
 
-    ! At this point, we must also initialize all wing / body data: in wabbit, it may
-    ! be that the initial grid contains less blocks than we wave MPIRANKS. Therefore,
-    ! not all CPUS might call the MPI_BCAST for this initialization. (This is a BUGFIX
-    ! 21 Oct 2019, Yokohama, Thomas)
-    Nwings = 2
-    if (Insects(Insect_ID)%second_wing_pair) Nwings = 4
-
-    ! wing id number: 1 = left, 2 = right, 3 = 2nd left, 4 = 2nd right
-    do wingID = 1, Nwings
-        ! do not try to setup wings that are not used
-        if (Insects(Insect_ID)%wings_used(wingID)) then
-            ! exclude wings that are hard-coded, otherwise, call initialization routine
-            if (Insects(Insect_ID)%WingShape(wingID)/="pointcloud" .and. Insects(Insect_ID)%WingShape(wingID)/="mosquito_iams" .and. &
-                Insects(Insect_ID)%WingShape(wingID)/="suzuki" .and. Insects(Insect_ID)%WingShape(wingID)/="rectangular" .and. &
-                Insects(Insect_ID)%WingShape(wingID)/="TwoEllipses" .and. (Insects(Insect_ID)%wing_file_type(wingID)) /= "kleemeier" &
-                .and. Insects(Insect_ID)%WingShape(wingID)/="suzuki_butterfly".and. Insects(Insect_ID)%WingShape(wingID)/="none") then
-
-                ! we have some pre-defined, hard-coded data, but also can read the wing shape
-                ! from INI files.
-                call Setup_Wing_Fourier_coefficients(Insects(Insect_ID), wingID)
-            endif
-        endif
-    enddo
-
-
-if (root) then
-    write(*,'(80("<"))')
-    write(*,*) "Insect initialization is complete."
-    write(*,'(80("<"))')
-endif
-Insects(Insect_ID)%initialized = .true.
+    if (root) then
+        write(*,'(80("<"))')
+        write(*,*) "Insect initialization is complete."
+        write(*,'(80("<"))')
+    endif
+    Insects(Insect_ID)%initialized = .true.
 
 end subroutine insect_init
 
@@ -512,10 +468,10 @@ subroutine insect_clean(insect)
 
     type(diptera), intent(inout) :: insect
 
-    call wingkinematics_clean(insect%kine_wing_l)
-    call wingkinematics_clean(insect%kine_wing_r)
-    call wingkinematics_clean(insect%kine_wing_l2)
-    call wingkinematics_clean(insect%kine_wing_r2)
+    call wingkinematics_clean(insect%WingKinematics(1))
+    call wingkinematics_clean(insect%WingKinematics(2))
+    call wingkinematics_clean(insect%WingKinematics(3))
+    call wingkinematics_clean(insect%WingKinematics(4))
 
     if (allocated(insect%data_kineloader)) deallocate(insect%data_kineloader)
     if (allocated(insect%RHS)) deallocate(insect%RHS)
@@ -540,7 +496,7 @@ end subroutine insect_clean
 subroutine wingkinematics_clean(wing_kinematics)
     implicit none
 
-    type(wingkinematics), intent(inout) :: wing_kinematics
+    type(wingkinematics_type), intent(inout) :: wing_kinematics
 
     if (allocated(wing_kinematics%ai_phi)) deallocate(wing_kinematics%ai_phi)
     if (allocated(wing_kinematics%bi_phi)) deallocate(wing_kinematics%bi_phi)

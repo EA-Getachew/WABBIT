@@ -12,24 +12,24 @@ subroutine FlappingMotionWrap ( time, Insect, wingID )
 
   select case ( wingID )
   case (1) !("left")
-      call FlappingMotion ( time, Insect, Insect%FlappingMotion_left, &
+      call FlappingMotion ( time, Insect, Insect%FlappingMotion(wingID), &
       Insect%phi_l, Insect%alpha_l, Insect%theta_l, Insect%phi_dt_l,&
-      Insect%alpha_dt_l, Insect%theta_dt_l, Insect%kine_wing_l, wingID )
+      Insect%alpha_dt_l, Insect%theta_dt_l, Insect%WingKinematics(wingID), wingID )
 
   case (2) !("right")
-      call FlappingMotion ( time, Insect, Insect%FlappingMotion_right, &
+      call FlappingMotion ( time, Insect, Insect%FlappingMotion(wingID), &
       Insect%phi_r, Insect%alpha_r, Insect%theta_r, Insect%phi_dt_r, &
-      Insect%alpha_dt_r, Insect%theta_dt_r, Insect%kine_wing_r, wingID )
+      Insect%alpha_dt_r, Insect%theta_dt_r, Insect%WingKinematics(wingID), wingID )
 
   case (3) !("left2")
-      call FlappingMotion ( time, Insect, Insect%FlappingMotion_left2, &
+      call FlappingMotion ( time, Insect, Insect%FlappingMotion(wingID), &
       Insect%phi_l2, Insect%alpha_l2, Insect%theta_l2, Insect%phi_dt_l2,&
-      Insect%alpha_dt_l2, Insect%theta_dt_l2, Insect%kine_wing_l2, wingID )
+      Insect%alpha_dt_l2, Insect%theta_dt_l2, Insect%WingKinematics(wingID), wingID )
 
   case (4) !("right2")
-      call FlappingMotion ( time, Insect, Insect%FlappingMotion_right2, &
+      call FlappingMotion ( time, Insect, Insect%FlappingMotion(wingID), &
       Insect%phi_r2, Insect%alpha_r2, Insect%theta_r2, Insect%phi_dt_r2, &
-      Insect%alpha_dt_r2, Insect%theta_dt_r2, Insect%kine_wing_r2, wingID )
+      Insect%alpha_dt_r2, Insect%theta_dt_r2, Insect%WingKinematics(wingID), wingID )
 
   case default
     call abort(77744, "not a valid wing identifier")
@@ -65,7 +65,7 @@ subroutine FlappingMotion(time, Insect, protocoll, phi, alpha, theta, phi_dt, &
   type(diptera), intent(inout) :: Insect
   real(kind=rk), intent(out) :: phi, alpha, theta, phi_dt, alpha_dt, theta_dt
   character (len=*), intent(in) :: protocoll
-  type(wingkinematics), intent(inout) :: kine
+  type(wingkinematics_type), intent(inout) :: kine
   ! wingID is used for kineloader (to figure out which columns to use from the data array)
   integer(kind=2), intent(in) :: wingID
 
@@ -104,10 +104,11 @@ subroutine FlappingMotion(time, Insect, protocoll, phi, alpha, theta, phi_dt, &
     !---------------------------------------------------------------------------
     if (.not.kine%initialized) then
         if (root) then
-          write(*,'(80("<"))')
+          write(*,'(80("-"))')
           write(*,*) "Initializing wing kinematics!"
+          write(*,*) "wingID", wingID
           write(*,*) "*.ini file is: "//trim(adjustl(kine%infile))
-          write(*,'(80("<"))')
+          write(*,'(80("-"))')
         endif
       ! parse ini file
       call read_ini_file_mpi(kinefile, kine%infile, .true.)
