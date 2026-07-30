@@ -1501,12 +1501,35 @@ subroutine draw_wing_polygon(xx0, ddx, mask, mask_color, us, Insect, color_wing,
     if (Insect%corrugated(wingID)) call abort(21072602, "draw_wing_polygon can currently only be used with non-corrugated wings")
     if ( Insect%wing_thickness_distribution(wingID)=="variable") call abort(21072603, "draw_wing_polygon can currently only be used with a constant wing thickness")
 
+    !-----------------------------------------------------------------------------
+    ! bristles (in this type of wing we need to start with them)
+    !-----------------------------------------------------------------------------
+    ! generic polygon wings can also have bristles: they are read from inifile.
+    !
+    ! NOTE: unlike the fourier wings, the polygon routines contain several layers of bounding boxes, 
+    ! and this may result in incomplete bristles. Hence, we draw the bristles first, then add the wing.
+    ! (TE, 30/jul/2026)
+    if (Insect%bristles(wingID)) then
+        ! Loop for all bristles
+        do j = 1, Insect%n_bristles(wingID)
+            ! start / end point (in wing coordinate system)
+            xa = (/Insect%bristles_coords(wingID,j,1), Insect%bristles_coords(wingID,j,2), 0.0_rk/)
+            xb = (/Insect%bristles_coords(wingID,j,3), Insect%bristles_coords(wingID,j,4), 0.0_rk/)
+            R = Insect%bristles_coords(wingID,j,5)
 
+            ! note input to draw_bristle is in wing coordinates
+            call draw_bristle(xa, xb, R, xx0, ddx, mask, mask_color, us, Insect, color_wing, M_g2b, M_b2w, &
+                              x_pivot_b, rot_rel_wing_w)
+        enddo
+    endif
+
+    !-----------------------------------------------------------------------------
+    ! code for actual polygon wing
+    !-----------------------------------------------------------------------------
     Bs(1) = size(mask,1) - 2*g
     Bs(2) = size(mask,2) - 2*g
     Bs(3) = size(mask,3) - 2*g
-
-    n = Insect%n_polygon_points(wingID)
+    n          = Insect%n_polygon_points(wingID)
     band_width = Insect%safety
 
    
@@ -1820,24 +1843,6 @@ subroutine draw_wing_polygon(xx0, ddx, mask, mask_color, us, Insect, color_wing,
             enddo
         enddo
     enddo
-
-    !-----------------------------------------------------------------------------
-    ! bristles
-    !-----------------------------------------------------------------------------
-    ! generic fourier wings can also have bristles: they are read from an inifile
-    if (Insect%bristles(wingID)) then
-        ! Loop for all bristles
-        do j = 1, Insect%n_bristles(wingID)
-            ! start / end point (in wing coordinate system)
-            xa = (/Insect%bristles_coords(wingID,j,1), Insect%bristles_coords(wingID,j,2), 0.0_rk/)
-            xb = (/Insect%bristles_coords(wingID,j,3), Insect%bristles_coords(wingID,j,4), 0.0_rk/)
-            R = Insect%bristles_coords(wingID,j,5)
-
-            ! note input to draw_bristle is in wing coordinates
-            call draw_bristle(xa, xb, R, xx0, ddx, mask, mask_color, us, Insect, color_wing, M_g2b, M_b2w, &
-                              x_pivot_b, rot_rel_wing_w)
-        enddo
-    endif
 
 end subroutine draw_wing_polygon
 
