@@ -289,15 +289,6 @@ subroutine insect_init(time, fname_ini, Insect_ID, resume_backup, fname_backup, 
 
     call read_param_mpi(PARAMS, SECTION, "startup_conditioner",Insects(Insect_ID)%startup_conditioner,"no")
 
-    ! 28/01/2019: Thomas. Discovered that this was done block based, i.e. the smoothing layer
-    ! had different thickness, if some blocks happened to be at different levels (and still carry
-    ! a part of the smoothing layer.) I don't know if that made sense, because the layer shrinks/expands then
-    ! and because it might be discontinous. Both options are included now, default is "as before"
-    ! Insect%smoothing_thickness=="local"  : smoothing_layer = c_sm * 2**-J * L/(BS-1)
-    ! Insect%smoothing_thickness=="global" : smoothing_layer = c_sm * 2**-Jmax * L/(BS-1)
-    ! NOTE: for FLUSI, this has no impact! Here, the grid is constant and equidistant.
-    ! NOTE: 05/2020 Thomas, I changed the default back to local.
-    call read_param_mpi(PARAMS, SECTION, "smoothing_thickness",Insects(Insect_ID)%smoothing_thickness,"global")
     call read_param_mpi(PARAMS, SECTION, "C_smooth",Insects(Insect_ID)%C_smooth,1.0_rk)
     call read_param_mpi(PARAMS, SECTION, "BodySuperSTLfile",Insects(Insect_ID)%BodySuperSTLfile,"none.superstl")
     ! when using CT data, code computes the mask function in a shell around fluid-solid interface.
@@ -378,7 +369,6 @@ subroutine insect_init(time, fname_ini, Insect_ID, resume_backup, fname_backup, 
         endif
     enddo
 
-    !---------------------------------------------------------------------------
     ! initialization for superSTl body
     !---------------------------------------------------------------------------
     if (Insects(Insect_ID)%BodyType == "superSTL") then

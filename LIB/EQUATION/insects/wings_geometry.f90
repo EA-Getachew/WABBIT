@@ -2,7 +2,7 @@
 ! the new routine (2/2019) creates the wings (if both wings are used, maybe just one is)
 ! and their solid body velocity field us. Note that us contains both contributions from
 ! body and wing motion.
-subroutine draw_insect_wings(time, xx0, ddx, mask, mask_color, us, Insect, delete)
+subroutine draw_insect_wings(time, xx0, ddx, mask, mask_color, us, Insect)
   implicit none
 
   real(kind=rk), intent(in)    :: time
@@ -11,7 +11,6 @@ subroutine draw_insect_wings(time, xx0, ddx, mask, mask_color, us, Insect, delet
   real(kind=rk), intent(inout) :: mask(0:,0:,0:)
   real(kind=rk), intent(inout) :: us(0:,0:,0:,1:)
   real(kind=rk), intent(inout) :: mask_color(0:,0:,0:)
-  logical, intent(in) :: delete
 
   integer :: ix, iy, iz
   real(kind=rk), dimension(1:3) :: x_glob, x_body, v_tmp
@@ -23,29 +22,6 @@ subroutine draw_insect_wings(time, xx0, ddx, mask, mask_color, us, Insect, delet
   endif
 
 
-  if (delete) then
-    if (grid_time_dependent) then
-        ! The grid is time-dependent. In this case, the separation between
-        ! time-dependent (wings, moving body) and time-independent (fixed body)
-        ! is done elsewhere, so deleting means delete entire block
-        mask = 0.00_rk
-        us(:,:,:,1) = 0.00_rk
-        us(:,:,:,2) = 0.00_rk
-        us(:,:,:,3) = 0.00_rk
-        mask_color = 0
-    else
-        ! for the fixed-grid codes, delete only the body.
-        ! real comparison should usually be done with a tolerance, but since we only ever set color values and do no arithmetics, this is fine
-        where (mask_color==Insect%color_r .or. mask_color==Insect%color_l .or. &
-                mask_color==Insect%color_r2 .or. mask_color==Insect%color_l2)
-            mask = 0.00_rk
-            us(:,:,:,1) = 0.00_rk
-            us(:,:,:,2) = 0.00_rk
-            us(:,:,:,3) = 0.00_rk
-            mask_color = 0
-        end where
-    endif
-  endif
 
   ! sometimes we have the geometry type insect but it has no wings (for example for fractal_tree), we then want to skip the rest
   if (.not. any(Insect%WingsUsed)) return
@@ -55,27 +31,14 @@ subroutine draw_insect_wings(time, xx0, ddx, mask, mask_color, us, Insect, delet
     write(*,'("Did you call Update_Insect before draw_insect_wings?")')
   endif
 
-  ! 28/01/2019: Thomas. Discovered that this was done block based, i.e. the smoothing layer
-  ! had different thickness, if some blocks happened to be at different levels (and still carry
-  ! a part of the smoothing layer.) I don't know if that made sense, because the layer shrinks/expands then
-  ! and because it might be discontinous. Both options are included now, default is "as before"
-  ! Insect%smoothing_thickness=="local"  : smoothing_layer = c_sm * 2**-J * L/(BS-1)
-  ! Insect%smoothing_thickness=="global" : smoothing_layer = c_sm * 2**-Jmax * L/(BS-1)
-  ! NOTE: for FLUSI, this has no impact! Here, the grid is constant and equidistant.
-  if (Insect%smoothing_thickness=="local" .or. .not. grid_time_dependent) then
-    Insect%L_smooth = Insect%C_smooth*maxval(ddx)
-    if (Insect%smoothing_type == "hester") then
-        Insect%L_smooth = Insect%epsilon_hester
-        Insect%safety = max(5.0_rk*Insect%epsilon_hester, 2*maxval(ddx))
-    else
-        Insect%safety = 3.5_rk*Insect%L_smooth
-    end if
-  endif
-
   !-----------------------------------------------------------------------------
   ! Stage I: mask + us field in BODY system
   !-- wingID: 1 = left, 2 = right, 3 = 2nd left, 4 = 2nd right
   !-----------------------------------------------------------------------------
+
+  ! NOTE: For an unknown reason, a different orderung (L,R,L2,R2) instead of (R,L,R2,L2) 
+  ! changes the results slightly and the unit tests fail.
+
   if (Insect%RightWing) then
     call draw_wing(xx0, ddx, mask, mask_color, us, Insect, Insect%color_r, 2_2, &
     Insect%M_g2b, Insect%M_b2w_r, Insect%x_pivot_r_b, Insect%rot_rel_wing_r_w, "R" )
@@ -1523,7 +1486,7 @@ subroutine draw_wing_polygon(xx0, ddx, mask, mask_color, us, Insect, color_wing,
     real(kind=rk) :: wingbox_w(1:6), x_wingbox_w(1:2), y_wingbox_w(1:2), z_wingbox_w(1:2)
     real(kind=rk) :: segmentbox_w(1:6), x_segmentbox_w(1:2), y_segmentbox_w(1:2), z_segmentbox_w(1:2)
     real(kind=rk) :: wingbox_g_min(1:3), wingbox_g_max(1:3), segmentbox_g_min(1:3), segmentbox_g_max(1:3)
-    real(kind=rk) :: p1(1:2), p2(1:2)
+    real(kind=rk) :: p1(1:2), p2(1:2), xa(1:3), xb(1:3), R
 
     real(kind=rk), allocatable, save :: tmp_dist_xy(:,:,:)
     logical, allocatable, save       :: tmp_active(:,:,:)
@@ -1543,7 +1506,7 @@ subroutine draw_wing_polygon(xx0, ddx, mask, mask_color, us, Insect, color_wing,
     Bs(2) = size(mask,2) - 2*g
     Bs(3) = size(mask,3) - 2*g
 
-    n = Insect%n_polygon_points
+    n = Insect%n_polygon_points(wingID)
     band_width = Insect%safety
 
    
@@ -1641,8 +1604,8 @@ subroutine draw_wing_polygon(xx0, ddx, mask, mask_color, us, Insect, color_wing,
             idx_p2 = 1
         endif
 
-        p1 = Insect%polygon_wings(idx_p1,1:2)
-        p2 = Insect%polygon_wings(idx_p2,1:2)
+        p1 = Insect%polygon_wings(idx_p1, 1:2, wingID)
+        p2 = Insect%polygon_wings(idx_p2, 1:2, wingID)
 
         ! cheap geometry check, building a second local bounding box around segment 
         ! to check wether or not the segment is important for the specific block
@@ -1788,7 +1751,7 @@ subroutine draw_wing_polygon(xx0, ddx, mask, mask_color, us, Insect, color_wing,
                 if (x_w(3) > wingbox_w(6)) cycle
 
                 ! Check whether the point is inside the 2D polygon in the wing plane
-                inside_polygon = point_in_polygon_2D(x_w(1:2), Insect%polygon_wings, n)
+                inside_polygon = point_in_polygon_2D(x_w(1:2), Insect%polygon_wings(:,:,wingID), n)
 
                 ! Case 1:
                 ! tmp_active = true
@@ -1840,8 +1803,6 @@ subroutine draw_wing_polygon(xx0, ddx, mask, mask_color, us, Insect, color_wing,
                 !----------------------------------------------------------
                 ! call step and update mask, us
                 !----------------------------------------------------------
-
-                ! mask_color(ix,iy,iz) = color_wing
                 mask_value = step(phi, 0.0_rk, Insect%L_smooth, Insect%safety,  Insect%smoothing_type_int)
 
                 ! update only if the new mask value is higher than the one before
@@ -1859,6 +1820,24 @@ subroutine draw_wing_polygon(xx0, ddx, mask, mask_color, us, Insect, color_wing,
             enddo
         enddo
     enddo
+
+    !-----------------------------------------------------------------------------
+    ! bristles
+    !-----------------------------------------------------------------------------
+    ! generic fourier wings can also have bristles: they are read from an inifile
+    if (Insect%bristles(wingID)) then
+        ! Loop for all bristles
+        do j = 1, Insect%n_bristles(wingID)
+            ! start / end point (in wing coordinate system)
+            xa = (/Insect%bristles_coords(wingID,j,1), Insect%bristles_coords(wingID,j,2), 0.0_rk/)
+            xb = (/Insect%bristles_coords(wingID,j,3), Insect%bristles_coords(wingID,j,4), 0.0_rk/)
+            R = Insect%bristles_coords(wingID,j,5)
+
+            ! note input to draw_bristle is in wing coordinates
+            call draw_bristle(xa, xb, R, xx0, ddx, mask, mask_color, us, Insect, color_wing, M_g2b, M_b2w, &
+                              x_pivot_b, rot_rel_wing_w)
+        enddo
+    endif
 
 end subroutine draw_wing_polygon
 
@@ -2520,11 +2499,6 @@ subroutine Setup_WingShape_from_inifile( Insect, wingID, fname )
     integer(kind=ik) :: a1,b1,c
     !KVN-2025<<<<<
 
-    ! polygon wing geometry
-    real(kind=rk), allocatable :: polygon_wings(:,:)
-    integer(kind=ik) :: n_polygon_points = 0
-
-
     if (root) then
         write(*,'(80("─"))')
         write(*,'("Reading wing shape from file ",A)') fname
@@ -2707,10 +2681,17 @@ subroutine Setup_WingShape_from_inifile( Insect, wingID, fname )
             ! if (allocated(Insect%polygon_wings)) then 
                 !deallocate(Insect%polygon_wings)
             ! endif
-            allocate(Insect%polygon_wings(1:a,1:b))
+
+            ! we can use at most 1000 points
+            allocate(Insect%polygon_wings(1:1000, 1:2, 1:4))
         endif
-        Insect%polygon_wings(1:a,1:2) = tmparray(1:a,1:2)
-        Insect%n_polygon_points = a
+
+        if (a > size(Insect%polygon_wings,1) ) then
+            call abort(3007261, "We can use polygon wings only up to 1000 points, yours has more.")
+        endif
+
+        Insect%polygon_wings(1:a, 1:2, wingID) = tmparray(1:a, 1:2)
+        Insect%n_polygon_points(wingID) = a
         
         deallocate(tmparray)
 
@@ -2928,12 +2909,12 @@ subroutine set_wing_bounding_box( Insect, wingID)
         !            xmin               xmax     
         
         ! 2D box
-        n = Insect%n_polygon_points
+        n = Insect%n_polygon_points(wingID)
         ! x = chord direction, y = span direction
-        xmin = minval(Insect%polygon_wings(1:n,1))
-        xmax = maxval(Insect%polygon_wings(1:n,1))
-        ymin = minval(Insect%polygon_wings(1:n,2))
-        ymax = maxval(Insect%polygon_wings(1:n,2))
+        xmin = minval(Insect%polygon_wings(1:n,1,wingID))
+        xmax = maxval(Insect%polygon_wings(1:n,1,wingID))
+        ymin = minval(Insect%polygon_wings(1:n,2,wingID))
+        ymax = maxval(Insect%polygon_wings(1:n,2,wingID))
 
         Insect%wing_bounding_box(1:4,wingID) = (/xmin, xmax, ymin, ymax/)
 
@@ -2965,7 +2946,7 @@ subroutine set_wing_bounding_box( Insect, wingID)
         endif
     end if
 
-    ! Mirror the bounding box for left wings
+    ! Mirror the bounding box for left wings (because the z direction points in the opposite direction!)
     if ( (wingID == 1) .or. (wingID == 3) ) then
         tmp = Insect%wing_bounding_box(6,wingID)
         Insect%wing_bounding_box(6,wingID) = -Insect%wing_bounding_box(5,wingID)
@@ -3026,6 +3007,12 @@ subroutine draw_bristle(x1w, x2w, R0, xx0, ddx, mask, mask_color, us, Insect, co
     x2 = matmul( transpose(M_b2w), x2w) + x_pivot_b
     x2 = matmul( transpose(M_g2b), x2) + Insect%xc_body_g
 
+    ! Ideally, we would use this function form primitives-collection.
+    ! But the bristles are slightly displaced (I don't know why, maybe the x0_indices)
+    ! and this routine does not add the velocity field. As using the new function is a bigger operation
+    ! I postpone it for now. After all, the old code works. -TE 30/jul/2026
+    ! call draw_cylinder_rounded(mask, mask_color, xx0, ddx, g, x1, x2, R0, int(color_val, kind=ik), &
+    ! Insect%smoothing_type_int, Insect%L_smooth, x0_indices=(/0,0,0/))
 
     !---------------------------------------------------------------------------
     ! define bristle (cylinder) coordinate system

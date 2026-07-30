@@ -57,8 +57,19 @@ module module_insects
       logical :: initialized = .false.
       ! some details about the file, if reading from ini file
       character(len=clong) :: infile_convention="", infile_type="", infile_units="", infile="NOT-USED"
+
+      ! real(kind=rk) :: phi=0.0_rk, alpha=0.0_rk, theta=0.0_rk
+      ! real(kind=rk) :: phi_dt=0.0_rk, alpha_dt=0.0_rk, theta_dt=0.0_rk
+      ! real(kind=rk) :: eta_stroke=0.0_rk
+
+      !    real(kind=rk), dimension(1:3) :: rot_rel_wing_l_w=0.0_rk, rot_rel_wing_r_w=0.0_rk
+      ! real(kind=rk), dimension(1:3) :: rot_rel_wing_l_b=0.0_rk, rot_rel_wing_r_b=0.0_rk
+      ! real(kind=rk), dimension(1:3) :: rot_rel_wing_l_g=0.0_rk, rot_rel_wing_r_g=0.0_rk
    end type
 
+   ! type wingshape_type
+      
+   ! end type
 
    !-----------------------------------------------------------------------------
    ! derived datatype for insect parameters (for readability)
@@ -233,7 +244,7 @@ module module_insects
       real(kind=rk) :: Jxx2=0.0_rk,Jyy2=0.0_rk,Jzz2=0.0_rk,Jxy2=0.0_rk
       character(len=clong) :: wing_thickness_distribution(1:4) = "constant"
       character(len=clong) :: pointcloudfile = "none"
-      character(len=clong) :: smoothing_thickness = "global", wing_file_type(1:4) = "fourier"
+      character(len=clong) :: wing_file_type(1:4) = "fourier"
       logical :: corrugated(1:4) = .false.
       real(kind=rk) :: corrugation_array_bbox(1:4,1:4)
       !KVN-2025>>>>>
@@ -253,19 +264,17 @@ module module_insects
       real(kind=rk) :: B_membrane(1:4), L_membrane(1:4)
       logical :: damaged(1:4) = .false.
 
-	   ! polygon wing geometry
-      ! polygon_wings(:,1) = x_w coordinates
-      ! polygon_wings(:,2) = y_w coordinates
-      real(kind=rk), allocatable :: polygon_wings(:,:)
-      integer(kind=ik) :: n_polygon_points = 0
+      ! polygon wing geometry
+      ! polygon_wings(:,1,wingID) = x_w coordinates (wingID: 1:4)
+      ! polygon_wings(:,2,wingID) = y_w coordinates
+      real(kind=rk), allocatable :: polygon_wings(:,:,:)
+      integer(kind=ik) :: n_polygon_points(1:4) = 0
 
       !--------------------------------------------------------------
       ! Wing kinematics
       !--------------------------------------------------------------
       ! wing kinematics Fourier coefficients
-      type(wingkinematics_type) :: WingKinematics(1:4)
-
-      
+      type(wingkinematics_type) :: WingKinematics(1:4)      
       ! the following flag makes the code write the kinematics log to either kinematics.t
       ! (regular simulation) or kinematics.dry-run.t (for a dry run). The reason for this
       ! is that during postprocessing of an existing run, the dry run would overwrite the
@@ -706,7 +715,7 @@ contains
    !-------------------------------------------------------------------------------
    ! Main routine for drawing insects. Draws body and wings, parameters are in "INSECT"
    !-------------------------------------------------------------------------------
-   subroutine Draw_Insect( time, Insect, xx0, ddx, mask, mask_color, us, delete )
+   subroutine Draw_Insect( time, Insect, xx0, ddx, mask, mask_color, us)
       implicit none
 
       real(kind=rk), intent(in)      :: time
@@ -715,61 +724,15 @@ contains
       real(kind=rk), intent(inout)   :: mask(0:,0:,0:)
       real(kind=rk), intent(inout)   :: us(0:,0:,0:,1:)
       real(kind=rk), intent(inout)   :: mask_color(0:,0:,0:)
-      logical, intent(in)            :: delete  !< delete old mask?
 
       if ((dabs(Insect%time-time)>1.0d-10).and.root) then
          write(*,'("error! time=",es15.8," but Insect%time=",es15.8)') time, Insect%time
          write(*,'("Did you call Update_Insect before Draw_Insect?")')
       endif
 
-      ! 28/01/2019: Thomas. Discovered that this was done block based, i.e. the smoothing layer
-      ! had different thickness, if some blocks happened to be at different levels (and still carry
-      ! a part of the smoothing layer.) I don't know if that made sense, because the layer shrinks/expands then
-      ! and because it might be discontinous. Both options are included now, default is "as before"
-      ! Insect%smoothing_thickness=="local"  : smoothing_layer = c_sm * 2**-J * L/(BS-1)
-      ! Insect%smoothing_thickness=="global" : smoothing_layer = c_sm * 2**-Jmax * L/(BS-1)
-      if (Insect%smoothing_thickness=="local") then
-         Insect%L_smooth = Insect%C_smooth*maxval(ddx)
-         if (Insect%smoothing_type == "hester") then
-            Insect%L_smooth = Insect%epsilon_hester
-            Insect%safety = max(5.0_rk*Insect%epsilon_hester, 2*maxval(ddx))
-        else
-            Insect%safety = 3.5_rk*Insect%L_smooth
-        end if
-      endif
 
-      ! delete old mask
-      if (delete) call delete_old_mask( time, mask, mask_color, us, Insect )
-
-      !-----------------------------------------------------------------------------
-      ! BODY. Now the body is special: if the insect does not move (or rotate), the
-      ! body does not change in time. On the other hand, it is quite expensive to
-      ! compute, since it involves a lot of points (volume), and it is a source of
-      ! load balancing problems, since many cores do not draw the body at all.
-      ! We thus try to draw it only once and then simply not to erase it later.
-      !-----------------------------------------------------------------------------
-      if (Insect%body_moves=="no" .and. .not. grid_time_dependent) then
-         if (.not. Insect%body_already_drawn) then
-            ! the body is at rest, but it is the first call to this routine, so draw it now
-            if (root) then
-               write(*,'(80("~"))')
-               write(*,*) "Flag Insect%body_moves is no and we did not yet draw"
-               write(*,*) "the body once: we do that now, and skip draw_insect_body"
-               write(*,*) "from now on. time=", time
-               write(*,'(80("~"))')
-            endif
-            call draw_insect_body( time, xx0, ddx, mask, mask_color, us, Insect, delete=.false.)
-            Insect%body_already_drawn = .true.
-         endif
-      else
-         ! the body moves, draw it
-         call draw_insect_body( time, xx0, ddx, mask, mask_color, us, Insect, delete=.false.)
-      endif
-
-      !-----------------------------------------------------------------------------
-      ! Wings
-      !-----------------------------------------------------------------------------
-      call draw_insect_wings( time, xx0, ddx, mask, mask_color, us, Insect, delete=.false.)
+      call draw_insect_body( time, xx0, ddx, mask, mask_color, us, Insect)
+      call draw_insect_wings( time, xx0, ddx, mask, mask_color, us, Insect)
 
       ! this is a debug test, which succeeded.
       !call check_if_us_is_derivative_of_position_wingtip(time, Insect)
@@ -1305,66 +1268,6 @@ contains
    end subroutine wing_angular_accel
 
 
-   !> Delete the mask of the insect from the previous time step.
-   !! This routine first checks for the colors of the insects and deletes the mask where encessary
-   subroutine delete_old_mask( time, mask, mask_color, us, Insect )
-      implicit none
-
-      real(kind=rk), intent(in) :: time
-      type(diptera),intent(in) :: Insect
-      real(kind=rk),intent(inout) :: mask(0:,0:,0:)
-      real(kind=rk),intent(inout) :: us(0:,0:,0:,1:)
-      real(kind=rk),intent(inout) :: mask_color(0:,0:,0:)
-      integer(kind=2) :: color_body, color_l, color_r, color_l2, color_r2
-      logical, save :: cleaned_already_once = .false.
-
-      ! colors for Diptera (one body, two wings)
-      color_body = Insect%color_body
-      color_l = Insect%color_l
-      color_r = Insect%color_r
-      color_l2 = Insect%color_l2
-      color_r2 = Insect%color_r2
-
-      !-----------------------------------------------------------------------------
-      ! delete old mask
-      !-----------------------------------------------------------------------------
-      if (Insect%body_moves=="no" .and. .not. grid_time_dependent .and. cleaned_already_once) then
-         ! the body is at rest, so we will not draw it. Delete the wings, as they move.
-         ! real comparison should usually be done with a tolerance, but since we only ever set color values and do no arithmetics, this is fine
-         where (mask_color==dble(color_l) .or. mask_color==dble(color_r) .or. &
-            mask_color==dble(color_l2) .or. mask_color==dble(color_r2))
-            mask = 0.0_rk
-            mask_color = 0
-         end where
-         ! as the body rests it has no solid body velocity, which means we can safely
-         ! reset the velocity everywhere (this step is actually unnessesary, but for
-         ! safety we do it as well)
-         ! real comparison should usually be done with a tolerance, but since we only ever set color values and do no arithmetics, this is fine
-         where (mask_color==dble(color_body) .or. mask_color==dble(color_l) .or. mask_color==dble(color_r) .or. &
-            mask_color==dble(color_l2) .or. mask_color==dble(color_r2))
-            us(:,:,:,1) = 0.0_rk
-            us(:,:,:,2) = 0.0_rk
-            us(:,:,:,3) = 0.0_rk
-         end where
-      else
-         ! the body of the insect moves, so we will construct the entire insect in this
-         ! (and any other) call, we need to reset the mask of the insect only
-         ! real comparison should usually be done with a tolerance, but since we only ever set color values and do no arithmetics, this is fine
-         where (mask_color==dble(color_body) .or. mask_color==dble(color_l) .or. mask_color==dble(color_r) .or. &
-            mask_color==dble(color_l2) .or. mask_color==dble(color_r2))
-            mask = 0.0_rk
-            mask_color = 0
-            us(:,:,:,1) = 0.0_rk
-            us(:,:,:,2) = 0.0_rk
-            us(:,:,:,3) = 0.0_rk
-         end where
-      endif
-
-      cleaned_already_once = .true.
-
-   end subroutine delete_old_mask
-
-
    !-----------------------------------------------------------------------------
    ! return the body rotation matrix
    !-----------------------------------------------------------------------------
@@ -1393,7 +1296,7 @@ contains
 
 
    !-----------------------------------------------------------------------------
-   ! returns the stroke rotation matrix M_b2s for a given wing
+   ! returns the stroke rotation matrix M_b2s for a given side
    !-----------------------------------------------------------------------------
    subroutine stroke_rotation_matrix( M_b2s, eta_stroke, side )
       implicit none
@@ -1423,7 +1326,7 @@ contains
 
 
    !-----------------------------------------------------------------------------
-   ! returns the wing rotation matrix M_b2w for a given wing
+   ! returns the wing rotation matrix M_b2w for a given side
    !-----------------------------------------------------------------------------
    subroutine wing_rotation_matrix( M_b2w, alpha, theta, phi, eta_stroke, side )
       implicit none

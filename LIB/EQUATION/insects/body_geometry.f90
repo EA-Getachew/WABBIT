@@ -2,7 +2,7 @@
 ! the old routine (<02/2019) created just the body mask but not its solid velocity field
 ! now the routine does create the full body mask, including the velocity field. It sets us
 ! only inside the body (hence the wings set u_wing + u_body)
-subroutine draw_insect_body( time, xx0, ddx, mask, mask_color, us, Insect, delete)
+subroutine draw_insect_body( time, xx0, ddx, mask, mask_color, us, Insect)
     implicit none
 
     real(kind=rk), intent(in)    :: time
@@ -11,27 +11,9 @@ subroutine draw_insect_body( time, xx0, ddx, mask, mask_color, us, Insect, delet
     real(kind=rk), intent(inout) :: mask(0:,0:,0:)
     real(kind=rk), intent(inout) :: us(0:,0:,0:,1:)
     real(kind=rk), intent(inout) :: mask_color(0:,0:,0:)
-    logical, intent(in)           :: delete
 
     integer                       :: ix, iy, iz
     real(kind=rk), dimension(1:3) :: x_glob, x_body, v_tmp
-
-    ! 28/01/2019: Thomas. Discovered that this was done block based, i.e. the smoothing layer
-    ! had different thickness, if some blocks happened to be at different levels (and still carry
-    ! a part of the smoothing layer.) I don't know if that made sense, because the layer shrinks/expands then
-    ! and because it might be discontinous. Both options are included now, default is "as before"
-    ! Insect%smoothing_thickness=="local"  : smoothing_layer = c_sm * 2**-J * L/(BS-1)
-    ! Insect%smoothing_thickness=="global" : smoothing_layer = c_sm * 2**-Jmax * L/(BS-1)
-    ! NOTE: for FLUSI, this has no impact! Here, the grid is constant and equidistant.
-    if (Insect%smoothing_thickness=="local" .or. .not. grid_time_dependent) then
-        Insect%L_smooth = Insect%C_smooth*maxval(ddx)
-        if (Insect%smoothing_type == "hester") then
-            Insect%L_smooth = Insect%epsilon_hester
-            Insect%safety = max(5.0_rk*Insect%epsilon_hester, 2*maxval(ddx))
-        else
-            Insect%safety = 3.5_rk*Insect%L_smooth
-        end if
-    endif
 
     if (size(mask) /= size(mask_color) .or. size(us,4) /= 3) then
         write(*,*) "mask:", shape(mask), "mask_color:", shape(mask_color), "us:", shape(us)
@@ -41,29 +23,6 @@ subroutine draw_insect_body( time, xx0, ddx, mask, mask_color, us, Insect, delet
     if ((dabs(Insect%time-time)>1.0d-10).and.root) then
         write(*,'("error! time=",es15.8," but Insect%time=",es15.8)') time, Insect%time
         write(*,'("Did you call Update_Insect before draw_insect_body?")')
-    endif
-
-
-    if (delete) then
-        if (grid_time_dependent) then
-            ! The grid is time-dependent. In this case, the separation between
-            ! time-dependent (wings, moving body) and time-independent (fixed body)
-            ! is done elsewhere, so deleting means delete entire block
-            mask = 0.00_rk
-            us(:,:,:,1) = 0.00_rk
-            us(:,:,:,2) = 0.00_rk
-            us(:,:,:,3) = 0.00_rk
-            mask_color = 0
-        else
-            ! for the fixed-grid codes, delete only the body.
-            where (mask_color==Insect%color_body)
-                mask = 0.00_rk
-                us(:,:,:,1) = 0.00_rk
-                us(:,:,:,2) = 0.00_rk
-                us(:,:,:,3) = 0.00_rk
-                mask_color = 0
-            end where
-        endif
     endif
 
     !---------------------------------------------------------------------------
