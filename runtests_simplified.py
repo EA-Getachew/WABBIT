@@ -206,6 +206,7 @@ tests = [
      "commands": ["{mpi_command} {run_dir}/wabbit-post --dry-run PARAMS_dry_run.ini --memory={memory} --pruned --save-us"]},
     {"name": "dry_3Dbristles_CDF22", "type": "simulation", "root_folder": "insects", "input_files": ["*.ini"],
      "commands": ["{mpi_command} {run_dir}/wabbit-post --dry-run PARAMS_dry_run.ini --memory={memory} --pruned"]},
+    # wing geometry models
     {"name": "dry_Insects-Wing-Fourier", "type": "simulation", "root_folder": "insects", "input_files": ["*.ini"],
      "commands": ["{mpi_command} {run_dir}/wabbit-post --dry-run PARAMS.ini --memory={memory} --pruned"]},
     {"name": "dry_Insects-Wing-Linear", "type": "simulation", "root_folder": "insects", "input_files": ["*.ini"],
@@ -216,12 +217,16 @@ tests = [
      "commands": ["{mpi_command} {run_dir}/wabbit-post --dry-run PARAMS.ini --memory={memory} --pruned"]},
     {"name": "dry_Insects-Wing-FourierCorrugated", "type": "simulation", "root_folder": "insects", "input_files": ["*.ini"],
      "commands": ["{mpi_command} {run_dir}/wabbit-post --dry-run PARAMS.ini --memory={memory} --pruned"]},
+    {"name": "dry_Insects-Wing-FourierDamaged", "type": "simulation", "root_folder": "insects", "input_files": ["*.ini"],
+     "commands": ["{mpi_command} {run_dir}/wabbit-post --dry-run PARAMS.ini --memory={memory} --pruned"]},
+    # kinematics
     {"name": "dry_Insects-Kinematics-Fourier", "type": "simulation", "root_folder": "insects", "input_files": ["*.ini"],
      "commands": ["{mpi_command} {run_dir}/wabbit-post --dry-run PARAMS.ini --memory={memory} --pruned --save-us"]},
     {"name": "dry_Insects-Kinematics-Hermite", "type": "simulation", "root_folder": "insects", "input_files": ["*.ini"],
      "commands": ["{mpi_command} {run_dir}/wabbit-post --dry-run PARAMS.ini --memory={memory} --pruned --save-us"]},
     {"name": "dry_Insects-Kinematics-SuzukiHardcoded", "type": "simulation", "root_folder": "insects", "input_files": ["*.ini"],
      "commands": ["{mpi_command} {run_dir}/wabbit-post --dry-run PARAMS.ini --memory={memory} --pruned --save-us"]},
+
     {"name": "dry_Insects-CompleteModel-Dragonfly", "type": "simulation", "root_folder": "insects", "input_files": ["*.ini","*.sstl"],
      "commands": ["{mpi_command} {run_dir}/wabbit-post --dry-run PARAMS.ini --memory={memory} --pruned --save-us"]},
     {"name": "dry_snowman_2D_CDF22", "type": "simulation", "root_folder": "insects", "input_files": ["*.ini"],
