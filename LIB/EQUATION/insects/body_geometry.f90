@@ -1311,7 +1311,7 @@ subroutine draw_body_cone( xx0, ddx, mask, mask_color, us, Insect)
     ! a is the sidelength of the pyramid
     a = Insect%b_body
     ! alpha is HALF the opening angle
-    alpha = Insect%eta0
+    alpha = Insect%eta_stroke
     ! heigh is defined by alpha and a
     H = a * dcos(alpha)
     ! we draw a shell here, and this is its thickness

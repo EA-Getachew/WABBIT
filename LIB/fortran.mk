@@ -220,7 +220,7 @@ $(OBJDIR)/module_insects_integration_flusi_wabbit.o: module_insects_integration_
 
 $(OBJDIR)/module_insects.o: module_insects.f90 $(OBJDIR)/module_insects_integration_flusi_wabbit.o $(OBJDIR)/module_geometry.o \
 	body_geometry.f90 body_motion.f90 rigid_solid_time_stepper.f90 wings_geometry.f90 \
-	wings_motion.f90 stroke_plane.f90 pointcloud.f90 insect_init_clean.f90 \
+	wings_motion.f90 insect_init_clean.f90 \
 	kineloader.f90 $(OBJDIR)/module_t_files.o $(OBJDIR)/module_stl_file_reader.o
 	$(FC) $(FFLAGS) -c -o $@ $< $(LDFLAGS)
 
